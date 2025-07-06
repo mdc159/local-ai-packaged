@@ -1,13 +1,48 @@
 {
-    # Global options - works for both environments
+    # Global TLS options for production
     email {$LETSENCRYPT_EMAIL}
+    
+    # Enable experimental HTTP/3 support
+    servers {
+        protocols h1 h2 h3
+    }
+    
+    # Global security settings
+    security {
+        local_certs
+    }
 }
 
 # N8N
 {$N8N_HOSTNAME} {
-    # For domains, Caddy will automatically use Let's Encrypt
-    # For localhost/port addresses, HTTPS won't be enabled
-    reverse_proxy n8n:5678
+    # Automatic HTTPS with Let's Encrypt
+    tls {
+        protocols tls1.2 tls1.3
+    }
+    
+    # Security headers
+    header {
+        # HTTP Strict Transport Security
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Content type sniffing protection
+        X-Content-Type-Options "nosniff"
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Remove server header
+        -Server
+    }
+    
+    # Encode responses
+    encode gzip zstd
+    
+    reverse_proxy n8n:5678 {
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Port 443
+    }
 }
 
 # Open WebUI
