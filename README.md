@@ -241,6 +241,71 @@ to the IP address of your cloud instance.
 - sudo mkdir -p /usr/local/lib/docker/cli-plugins
 - sudo ln -s /usr/local/bin/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
 
+## 🔌 Services and Ports
+
+### Available Services
+
+Once the stack is running, you can access the following services:
+
+#### Development Environment (Private)
+
+**Main Services:**
+- **n8n**: http://localhost:5678/ - Workflow automation platform
+- **Open WebUI**: http://localhost:3000/ - ChatGPT-like interface for local models
+- **Flowise**: http://localhost:3001/ - Visual AI workflow builder
+- **Supabase Studio**: http://localhost:8000/ - Database management interface
+- **SearXNG**: http://localhost:8080/ - Privacy-focused metasearch engine
+- **Langfuse**: http://localhost:3002/ - LLM observability and analytics
+- **Neo4j Browser**: http://localhost:7474/ - Graph database browser
+
+**Additional Services (via Caddy proxy):**
+- **n8n**: http://localhost:8001/ (proxy to n8n:5678)
+- **Open WebUI**: http://localhost:8002/ (proxy to open-webui:8080)
+- **Flowise**: http://localhost:8003/ (proxy to flowise:3001)
+- **Supabase**: http://localhost:8005/ (proxy to kong:8000)
+- **Langfuse**: http://localhost:8007/ (proxy to langfuse-web:3000)
+- **Neo4j**: http://localhost:8008/ (proxy to neo4j:7474)
+
+#### Production Environment (Public)
+
+When deployed with `--environment public`, all services are accessible through your configured domains:
+
+- **n8n**: https://n8n.yourdomain.com
+- **Open WebUI**: https://openwebui.yourdomain.com
+- **Flowise**: https://flowise.yourdomain.com
+- **Supabase**: https://supabase.yourdomain.com
+- **Langfuse**: https://langfuse.yourdomain.com
+- **Neo4j**: https://neo4j.yourdomain.com
+
+### Internal Service Communication
+
+**Core AI Services:**
+- **Ollama**: `ollama:11434` (LLM inference server)
+- **Qdrant**: `qdrant:6333` (vector database)
+- **Neo4j**: `neo4j:7687` (graph database - Bolt protocol)
+
+**Data Services:**
+- **PostgreSQL**: `db:5432` (Supabase database)
+- **Redis**: `redis:6379` (caching and session storage)
+- **ClickHouse**: `clickhouse:8123` (analytics database)
+- **MinIO**: `minio:9000` (S3-compatible object storage)
+
+**Network Architecture:**
+- **Private Environment**: All service ports accessible for development and debugging
+- **Public Environment**: Only ports 80/443 exposed externally via Caddy reverse proxy
+- **Internal Communication**: Services communicate using Docker container names and internal networking
+- **Security**: Production deployment closes all ports except 80/443, routing all traffic through Caddy
+
+### Service Dependencies
+
+The stack uses a unified Docker Compose project name "localai" with the following key integration points:
+
+- **n8n** connects to PostgreSQL (`db:5432`) and Ollama (`ollama:11434`)
+- **Open WebUI** integrates with n8n via the `n8n_pipe.py` function
+- **Flowise** provides visual workflow building complementing n8n
+- **Supabase** serves as the primary database for the entire stack
+- **Caddy** handles reverse proxy and SSL termination for all services
+
 ## ⚡️ Quick start and usage
 
 The main component of the self-hosted AI starter kit is a docker compose file
