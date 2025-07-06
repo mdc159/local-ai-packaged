@@ -1,5 +1,5 @@
 {
-    email {$LETSENCRYPT_EMAIL}
+    email mike5150@protonmail.ch
 }
 
 # N8N
