@@ -36,62 +36,7 @@ def clone_supabase_repo():
     else:
         print("Supabase repository already exists, updating...")
         os.chdir("supabase")
-        
-        # Check if there are local changes
-        status_result = subprocess.run(["git", "status", "--porcelain"], 
-                                     capture_output=True, text=True, check=True)
-        
-        if status_result.stdout.strip():
-            print("Local changes detected, stashing before pull...")
-            run_command(["git", "stash", "push", "-m", "Auto-stash before upstream pull"])
-        
-        # Check current branch and set up tracking if needed
-        try:
-            # Get current branch name
-            branch_result = subprocess.run(["git", "branch", "--show-current"], 
-                                         capture_output=True, text=True, check=True)
-            current_branch = branch_result.stdout.strip()
-            
-            # Check if tracking is set up
-            tracking_result = subprocess.run(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], 
-                                           capture_output=True, text=True, check=False)
-            
-            if tracking_result.returncode != 0:
-                print(f"Setting up tracking for branch '{current_branch}' to origin/master...")
-                try:
-                    run_command(["git", "branch", "--set-upstream-to=origin/master", current_branch])
-                except subprocess.CalledProcessError:
-                    print("Warning: Could not set up tracking. Trying to switch to master branch...")
-                    run_command(["git", "checkout", "master"])
-            
-            # Pull from upstream with merge strategy
-            try:
-                run_command(["git", "pull", "--no-edit"])
-            except subprocess.CalledProcessError:
-                print("Merge conflicts detected. Attempting to resolve automatically...")
-                # Check if we're in a merge state
-                merge_head_result = subprocess.run(["git", "rev-parse", "--verify", "MERGE_HEAD"], 
-                                                 capture_output=True, text=True, check=False)
-                if merge_head_result.returncode == 0:
-                    print("Completing merge with default message...")
-                    run_command(["git", "commit", "--no-edit"])
-                else:
-                    print("Warning: Could not resolve merge automatically. Manual intervention may be needed.")
-                    raise
-            
-        except subprocess.CalledProcessError as e:
-            print(f"Warning: Could not update repository: {e}")
-            print("Continuing with existing repository...")
-        
-        # Reapply stashed changes if any
-        if status_result.stdout.strip():
-            print("Reapplying local changes...")
-            try:
-                run_command(["git", "stash", "pop"])
-                print("Local changes successfully reapplied!")
-            except subprocess.CalledProcessError:
-                print("Warning: Could not automatically reapply changes. Check 'git stash list' for manual recovery.")
-        
+        run_command(["git", "pull"])
         os.chdir("..")
 
 def prepare_supabase_env():
@@ -130,30 +75,7 @@ def start_local_ai(profile=None, environment=None):
     if environment and environment == "public":
         cmd.extend(["-f", "docker-compose.override.public.yml"])
     cmd.extend(["up", "-d"])
-    
-    try:
-        run_command(cmd)
-    except subprocess.CalledProcessError as e:
-        if "11434" in str(e):
-            print("Warning: Port 11434 is already in use (likely by an existing Ollama instance).")
-            print("Attempting to start services without Ollama...")
-            
-            # Try starting without the gpu-nvidia profile (which includes Ollama)
-            if profile == "gpu-nvidia":
-                print("Retrying with CPU profile to avoid Ollama port conflict...")
-                cmd = ["docker", "compose", "-p", "localai", "--profile", "cpu", "-f", "docker-compose.yml"]
-                if environment and environment == "private":
-                    cmd.extend(["-f", "docker-compose.override.private.yml"])
-                if environment and environment == "public":
-                    cmd.extend(["-f", "docker-compose.override.public.yml"])
-                cmd.extend(["up", "-d"])
-                run_command(cmd)
-                print("Services started successfully with CPU profile.")
-                print("Note: Ollama is not running. You may need to stop the existing Ollama instance manually.")
-            else:
-                raise
-        else:
-            raise
+    run_command(cmd)
 
 def generate_searxng_secret_key():
     """Generate a secret key for SearXNG based on the current platform."""
