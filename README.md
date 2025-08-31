@@ -257,7 +257,7 @@ to get started.
    <http://localhost:5678/workflow/vTN9y2dLXqTiDfPT>
 3. Create credentials for every service:
    
-   Ollama URL: http://ollama:11434
+   Ollama URL: http://ollama:11434 or http://host.docker.internal:11434
 
    Postgres (through Supabase): use DB, username, and password from .env. IMPORTANT: Host is 'db'
    Since that is the name of the service running Supabase
