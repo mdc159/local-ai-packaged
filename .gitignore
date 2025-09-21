@@ -7,3 +7,4 @@ shared-backup/
 searxng/settings.yml
 searxng/uwsgi*
 .local_ai_env_from_digital-ocean.md
+node_modules
