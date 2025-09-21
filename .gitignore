@@ -6,3 +6,5 @@ shared-backup/
 .env.test
 searxng/settings.yml
 searxng/uwsgi*
+node_modules/
+supabase/
