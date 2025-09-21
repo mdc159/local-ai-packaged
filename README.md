@@ -207,6 +207,8 @@ equals the one initialized with
 
 ## Deploying to the Cloud
 
+For detailed production deployment instructions, see the [Production Deployment Guide](docs/production-deployment.md).
+
 ### Prerequisites for the below steps
 
 - Linux machine (preferably Unbuntu) with Nano, Git, and Docker installed
@@ -401,6 +403,88 @@ your local n8n instance.
 - [Breakdown Documents into Study Notes with MistralAI and Qdrant](https://n8n.io/workflows/2339-breakdown-documents-into-study-notes-using-templating-mistralai-and-qdrant/)
 - [Financial Documents Assistant using Qdrant and](https://n8n.io/workflows/2335-build-a-financial-documents-assistant-using-qdrant-and-mistralai/) [ Mistral.ai](http://mistral.ai/)
 - [Recipe Recommendations with Qdrant and Mistral](https://n8n.io/workflows/2333-recipe-recommendations-with-qdrant-and-mistral/)
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### Services Not Starting
+If services don't start automatically during `docker compose up`:
+- **n8n not starting**: Run `docker start n8n` manually
+- **Containers created but not running**: Check logs with `docker logs <container-name>`
+- **Timing issues**: Some services may need manual restart after dependencies are ready
+
+#### Service-Specific Issues
+
+**n8n**
+- If n8n doesn't start automatically, manually start it: `docker start n8n`
+- Verify workflows are imported: Check `n8n/backup/workflows/` directory
+- Database connection: Ensure PostgreSQL is healthy before starting n8n
+
+**SearXNG**
+- Permission errors: Run `chmod 755 searxng` and create settings file
+- Settings file missing: Create `searxng/settings.yml` with basic configuration
+- Container restarting: Check permissions on searxng directory
+
+**Neo4j**
+- Authentication fails: Username MUST be "neo4j" - update `NEO4J_AUTH=neo4j/yourpassword` in .env
+- Container restarting: Remove and recreate container after fixing auth
+
+**Supabase Auth**
+- Database URL parsing errors: Known issue with some versions
+- Workaround: Other Supabase services (Kong, Studio) work independently
+- Check environment variables in `supabase/docker/.env`
+
+**Dashy**
+- Not loading: Ensure Dashy is on port 8080 (not 4000) in docker-compose.yml
+- Config not mounting: Verify `dashy/dashy-conf.yml` is a file, not directory
+- Status checks failing: Update `statusCheckAcceptCodes` in configuration
+
+**Langfuse**
+- ClickHouse authentication: Password mismatch between service and environment
+- Web interface restarting: Check ClickHouse is healthy first
+
+#### Production Deployment Issues
+
+**For Public Environments:**
+```bash
+python3 start_services.py --profile cpu --environment public
+```
+- Only ports 80/443 will be exposed
+- Ensure DNS A records point to server IP
+- Check Caddy logs for SSL certificate issues
+
+**Missing Supabase Directory:**
+The start script automatically clones Supabase. If missing:
+```bash
+git clone --filter=blob:none --no-checkout https://github.com/supabase/supabase.git
+cd supabase && git sparse-checkout init --cone && git sparse-checkout set docker && git checkout && cd ..
+```
+
+#### Checking Service Health
+```bash
+# View all service statuses
+docker compose -p localai ps
+
+# Check specific service logs
+docker compose -p localai logs <service-name> --tail 50
+
+# Test service connectivity
+docker exec caddy wget -qO- http://<service>:<port>
+
+# Count running services
+docker compose -p localai ps --format "table {{.Name}}\t{{.Status}}" | grep -c "Up"
+```
+
+#### Service URLs
+- **Dashboard**: https://yourdomain.com (root domain)
+- **n8n**: https://n8n.yourdomain.com
+- **Flowise**: https://flowise.yourdomain.com
+- **Open WebUI**: https://openwebui.yourdomain.com
+- **Supabase**: https://supabase.yourdomain.com
+- **Neo4j**: https://neo4j.yourdomain.com
+- **SearXNG**: https://searxng.yourdomain.com
+- **Langfuse**: https://langfuse.yourdomain.com
 
 ## Tips & tricks
 
