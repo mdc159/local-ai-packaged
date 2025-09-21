@@ -56,6 +56,8 @@ results from up to 229 search services. Users are neither tracked nor profiled, 
 
 ✅ [**Langfuse**](https://langfuse.com/) - Open source LLM engineering platform for agent observability
 
+✅ [**Dashy**](https://dashy.to/) - Unified dashboard interface for all AI services, accessible at your root domain
+
 ## Prerequisites
 
 Before you begin, make sure you have the following software installed:
@@ -286,6 +288,21 @@ you copied in a previous step.
 
 To open n8n at any time, visit <http://localhost:5678/> in your browser.
 To open Open WebUI at any time, visit <http://localhost:3000/>.
+
+### Accessing the Dashy Dashboard
+
+The Dashy dashboard provides a unified interface to access all your AI services from a single location:
+
+- **Local Development**: Visit <http://localhost:80/> (will redirect to HTTPS if Caddy is configured)
+- **Production**: Visit your root domain (e.g., https://yourdomain.com)
+
+The dashboard displays all services with:
+- Real-time status monitoring
+- Quick access links to each service
+- Services organized by category (AI Workflows, Chat & LLMs, Data Storage, Analytics, Infrastructure)
+- Customizable themes and layouts
+
+To customize the dashboard, edit the `dashy/dashy-conf.yml` file. For detailed customization options, see the [Dashy Customization Guide](docs/dashy-customization.md).
 
 With your n8n instance, you’ll have access to over 400 integrations and a
 suite of basic and advanced AI nodes such as
