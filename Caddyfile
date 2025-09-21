@@ -5,7 +5,7 @@
 
 # Root Domain - Dashy Dashboard
 pimpshizzle.com {
-    reverse_proxy dashy:4000
+    reverse_proxy dashy:8080
 }
 
 # N8N

@@ -360,7 +360,7 @@ services:
     container_name: dashy
     restart: unless-stopped
     expose:
-      - 4000/tcp
+      - 8080/tcp
     volumes:
       - ./dashy/dashy-conf.yml:/app/user-data/conf.yml:ro
       - ./dashy/icons:/app/public/item-icons:ro
