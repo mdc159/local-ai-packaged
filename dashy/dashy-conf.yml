@@ -1,0 +1,137 @@
+---
+appConfig:
+  theme: nord-frost
+  layout: auto
+  iconSize: medium
+  startingView: default
+  defaultOpeningMethod: newtab
+  statusCheck: true
+  statusCheckInterval: 60
+  disableUpdateChecks: false
+  disableServiceWorker: false
+  hideComponents:
+    hideNav: false
+    hideSearch: false
+    hideSettings: false
+    hideFooter: false
+
+pageInfo:
+  title: AI Stack Dashboard
+  description: Unified dashboard for local AI development services
+  navLinks:
+  - title: GitHub
+    path: https://github.com/mdc159/local-ai-packaged
+  - title: Documentation
+    path: https://github.com/mdc159/local-ai-packaged/blob/main/README.md
+
+sections:
+- name: AI Workflows & Automation
+  icon: fas fa-robot
+  items:
+  - title: n8n Workflows
+    description: Low-code workflow automation platform
+    icon: https://raw.githubusercontent.com/n8n-io/n8n/master/assets/n8n-logo.png
+    url: https://n8n.pimpshizzle.com
+    statusCheckUrl: https://n8n.pimpshizzle.com
+    tags: [automation, workflows, integration]
+    statusCheckAcceptCodes: "200,301,302,401"
+
+  - title: Flowise AI
+    description: No-code AI agent builder
+    icon: https://raw.githubusercontent.com/FlowiseAI/Flowise/main/packages/ui/public/favicon.ico
+    url: https://flowise.pimpshizzle.com
+    statusCheckUrl: https://flowise.pimpshizzle.com
+    tags: [ai, agents, no-code]
+    statusCheckAcceptCodes: "200,301,302,401"
+
+- name: Chat & Language Models
+  icon: fas fa-comments
+  items:
+  - title: Open WebUI
+    description: ChatGPT-like interface for local models
+    icon: https://raw.githubusercontent.com/open-webui/open-webui/main/static/favicon.png
+    url: https://openwebui.pimpshizzle.com
+    statusCheckUrl: https://openwebui.pimpshizzle.com
+    tags: [chat, llm, interface]
+    statusCheckAcceptCodes: "200,301,302"
+
+  - title: Ollama (Internal)
+    description: Local LLM inference server
+    icon: https://ollama.com/public/icon-32x32.png
+    url: http://ollama:11434
+    statusCheckUrl: http://ollama:11434
+    tags: [llm, models, api]
+    statusCheckAcceptCodes: "200"
+
+- name: Data & Storage
+  icon: fas fa-database
+  items:
+  - title: Supabase Studio
+    description: PostgreSQL database with API
+    icon: https://raw.githubusercontent.com/supabase/supabase/master/apps/www/public/favicon.ico
+    url: https://supabase.pimpshizzle.com
+    statusCheckUrl: https://supabase.pimpshizzle.com
+    tags: [database, api, auth]
+    statusCheckAcceptCodes: "200,301,302"
+
+  - title: Neo4j Browser
+    description: Knowledge graph database
+    icon: https://dist.neo4j.com/wp-content/uploads/neo4j_logo_globe.png
+    url: https://neo4j.pimpshizzle.com
+    statusCheckUrl: https://neo4j.pimpshizzle.com
+    tags: [graph, database, knowledge]
+    statusCheckAcceptCodes: "200,301,302,401"
+
+  - title: Qdrant (Internal)
+    description: Vector database for embeddings
+    icon: https://qdrant.tech/favicon.ico
+    url: http://qdrant:6333
+    statusCheckUrl: http://qdrant:6333
+    tags: [vectors, embeddings, search]
+    statusCheckAcceptCodes: "200"
+
+- name: Analytics & Search
+  icon: fas fa-chart-line
+  items:
+  - title: Langfuse
+    description: LLM observability and analytics
+    icon: https://langfuse.com/favicon.ico
+    url: https://langfuse.pimpshizzle.com
+    statusCheckUrl: https://langfuse.pimpshizzle.com
+    tags: [analytics, llm, monitoring]
+    statusCheckAcceptCodes: "200,301,302"
+
+  - title: SearXNG
+    description: Privacy-focused metasearch engine
+    icon: https://raw.githubusercontent.com/searxng/searxng/master/searx/static/themes/simple/img/favicon.png
+    url: https://searxng.pimpshizzle.com
+    statusCheckUrl: https://searxng.pimpshizzle.com
+    tags: [search, privacy, web]
+    statusCheckAcceptCodes: "200,301,302"
+
+- name: Infrastructure
+  icon: fas fa-server
+  items:
+  - title: PostgreSQL (Internal)
+    description: Main PostgreSQL database
+    icon: https://www.postgresql.org/favicon.ico
+    url: http://db:5432
+    statusCheckUrl: http://db:5432
+    tags: [database, sql]
+    statusCheckAcceptCodes: "200"
+
+  - title: Redis Cache (Internal)
+    description: In-memory data structure store
+    icon: https://redis.io/images/favicons/favicon-32x32.png
+    url: http://redis:6379
+    statusCheckUrl: http://redis:6379
+    tags: [cache, redis]
+    statusCheckAcceptCodes: "200"
+
+  - title: ClickHouse (Internal)
+    description: Time-series analytics database
+    icon: https://clickhouse.com/favicon.ico
+    url: http://clickhouse:8123
+    statusCheckUrl: http://clickhouse:8123/ping
+    tags: [analytics, timeseries]
+    statusCheckAcceptCodes: "200"

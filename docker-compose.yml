@@ -355,6 +355,19 @@ services:
         max-size: "1m"
         max-file: "1"
 
+  dashy:
+    image: lissy93/dashy:latest
+    container_name: dashy
+    restart: unless-stopped
+    expose:
+      - 4000/tcp
+    volumes:
+      - ./dashy/dashy-conf.yml:/app/user-data/conf.yml:ro
+      - ./dashy/icons:/app/public/item-icons:ro
+    environment:
+      - NODE_ENV=production
+      - IS_DOCKER=true
+
   ollama-cpu:
     profiles: ["cpu"]
     <<: *service-ollama

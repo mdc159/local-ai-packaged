@@ -3,6 +3,11 @@
     email {$LETSENCRYPT_EMAIL}
 }
 
+# Root Domain - Dashy Dashboard
+pimpshizzle.com {
+    reverse_proxy dashy:4000
+}
+
 # N8N
 {$N8N_HOSTNAME} {
     # For domains, Caddy will automatically use Let's Encrypt
