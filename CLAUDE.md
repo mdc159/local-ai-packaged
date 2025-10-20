@@ -241,7 +241,10 @@ The n8n-mcp service allows Claude Desktop to interact with n8n workflows via the
 - View logs: `docker logs n8n-mcp --tail 50`
 - Test health: `curl http://localhost:3002/health`
 
-For detailed documentation, see `n8n-mcp/README.md` and `n8n-mcp/CLAUDE_DESKTOP_CONFIG.md`.
+For detailed documentation, see:
+- [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md) - Step-by-step Claude Desktop setup guide
+- `n8n-mcp/README.md` - n8n-mcp server documentation
+- `n8n-mcp/CLAUDE_DESKTOP_CONFIG.md` - Additional configuration details
 
 ## Troubleshooting Notes
 

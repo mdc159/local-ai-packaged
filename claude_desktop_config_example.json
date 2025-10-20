@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "n8n-mcp-option1-recommended": {
+      "comment": "Option 1: Connect to the running n8n-mcp container from docker-compose stack",
+      "command": "docker",
+      "args": ["exec", "-i", "n8n-mcp", "node", "dist/mcp/index.js"]
+    },
+    "n8n-mcp-option2-standalone": {
+      "comment": "Option 2: Run a separate n8n-mcp container (needs network access)",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--init",
+        "--network", "localai_default",
+        "-e", "MCP_MODE=stdio",
+        "-e", "AUTH_TOKEN=zN9ngtXSNyNXlUB3gC2iO6fu/x32RtGMghzoWg0bdEM=",
+        "-e", "N8N_API_URL=http://n8n:5678",
+        "-e", "N8N_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmMjFiZDk2Yi0xOWVlLTQ1N2QtYWJjZS0xNmM3ZDBkYzY2OGIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzYwMTU3Nzc4fQ.TdXSFN8LwtIbRs80rIUkNGo7dVft_HZlc_T0eh3mAVo",
+        "-e", "WEBHOOK_SECURITY_MODE=moderate",
+        "ghcr.io/czlonkowski/n8n-mcp:latest"
+      ]
+    }
+  }
+}
