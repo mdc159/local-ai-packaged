@@ -77,6 +77,24 @@ def start_local_ai(profile=None, environment=None):
     cmd.extend(["up", "-d"])
     run_command(cmd)
 
+def start_local_ai_with_retry(profile=None, environment=None, max_retries=3):
+    """Start local AI services with retry logic for transient health check failures."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f"Starting local AI services (attempt {attempt}/{max_retries})...")
+            start_local_ai(profile, environment)
+            print("Successfully started all AI services")
+            return True
+        except subprocess.CalledProcessError:
+            if attempt < max_retries:
+                print("Startup failed (likely transient health check issue), retrying in 15 seconds...")
+                time.sleep(15)
+            else:
+                print(f"Failed to start AI services after {max_retries} attempts")
+                print("Check 'docker compose -p localai logs' for details")
+                raise
+    return False
+
 def generate_searxng_secret_key():
     """Generate a secret key for SearXNG based on the current platform."""
     print("Checking SearXNG settings...")
@@ -233,16 +251,16 @@ def main():
     check_and_fix_docker_compose_for_searxng()
     
     stop_existing_containers(args.profile)
-    
+
     # Start Supabase first
     start_supabase(args.environment)
-    
+
     # Give Supabase some time to initialize
     print("Waiting for Supabase to initialize...")
-    time.sleep(10)
-    
-    # Then start the local AI services
-    start_local_ai(args.profile, args.environment)
+    time.sleep(20)
+
+    # Then start the local AI services with retry logic
+    start_local_ai_with_retry(args.profile, args.environment, max_retries=3)
 
 if __name__ == "__main__":
     main()

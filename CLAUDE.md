@@ -21,17 +21,21 @@ Both stacks share the same Docker Compose project name (`localai`) so they appea
 
 ### Key Services
 
-- **n8n**: Low-code workflow automation platform (port 5678) - primary orchestration tool for AI agents
-- **n8n-mcp**: n8n Model Context Protocol server (port 3002) - allows Claude Desktop to interact with n8n workflows
-- **Ollama**: Local LLM runtime (port 11434) - runs models like qwen2.5:7b-instruct-q4_K_M
-- **Open WebUI**: ChatGPT-like interface (port 8080) - interacts with n8n agents via `n8n_pipe.py`
+Private mode port mappings (localhost only) are shown in parentheses. In public mode, all services are accessed via Caddy (ports 80/443).
+
+- **n8n**: Low-code workflow automation platform (5678) - primary orchestration tool for AI agents
+- **n8n-mcp**: n8n Model Context Protocol server (3002) - allows Claude Desktop to interact with n8n workflows
+- **Ollama**: Local LLM runtime (11434) - runs models like qwen2.5:7b-instruct-q4_K_M
+- **Open WebUI**: ChatGPT-like interface (8080) - interacts with n8n agents via `n8n_pipe.py`
 - **Supabase**: Database, vector store, and auth (Kong API on port 8000)
-- **Flowise**: No-code AI agent builder (port 3001)
-- **Qdrant**: Vector database (ports 6333/6334) - alternative to Supabase for vector storage
-- **Neo4j**: Graph database (ports 7474/7687) - for GraphRAG, LightRAG, Graphiti
-- **Langfuse**: LLM observability platform (port 3000)
-- **SearXNG**: Privacy-focused metasearch engine (port 8080)
-- **Caddy**: Reverse proxy with automatic HTTPS (ports 80/443)
+- **Flowise**: No-code AI agent builder (3001)
+- **Qdrant**: Vector database (6333/6334) - alternative to Supabase for vector storage
+- **Neo4j**: Graph database (7474/7687) - for GraphRAG, LightRAG, Graphiti
+- **Langfuse**: LLM observability platform (web: 3000, worker: 3030, minio: 9010/9011, clickhouse: 8123/9000/9009)
+- **SearXNG**: Privacy-focused metasearch engine (8081)
+- **Postgres**: Dedicated Postgres for Langfuse (5433) - separate from Supabase's Postgres
+- **Redis/Valkey**: Cache for n8n and Langfuse (6379)
+- **Caddy**: Reverse proxy with automatic HTTPS (80/443)
 
 ### Docker Profiles
 
@@ -44,8 +48,15 @@ The project supports GPU acceleration via Docker Compose profiles:
 ### Environment Modes
 
 Two deployment modes controlled by `start_services.py --environment`:
+
 - `private` (default): All service ports exposed on localhost for development
+  - Uses `docker-compose.override.private.yml` to map all ports to 127.0.0.1
+  - Direct access to all services without going through Caddy
+  - Best for local development and debugging
 - `public`: Only ports 80/443 exposed, Caddy handles routing with HTTPS
+  - Uses `docker-compose.override.public.yml` to close most ports
+  - All services accessed through Caddy reverse proxy
+  - Required for production deployments with custom domains
 
 ## Common Commands
 
@@ -138,11 +149,21 @@ Setup requires:
 ### Pre-configured Workflows
 
 Three n8n workflows are auto-imported from `n8n/backup/workflows/`:
+
 - `V1_Local_RAG_AI_Agent.json`: Basic RAG agent
 - `V2_Local_Supabase_RAG_AI_Agent.json`: RAG with Supabase vector store
 - `V3_Local_Agentic_RAG_AI_Agent.json`: Advanced agentic RAG
 
 The `n8n-import` service runs these imports before the main n8n service starts.
+
+**Testing workflows:**
+
+1. Open n8n at <http://localhost:5678> (or your configured domain)
+2. Navigate to the workflow you want to test
+3. Set up credentials for any required services (Ollama, Supabase/Postgres, Qdrant)
+4. Use the "Test workflow" button to execute manually
+5. Toggle the workflow to "Active" to enable webhook triggers
+6. Copy the "Production" webhook URL for integration with Open WebUI
 
 ### Shared Volume
 
@@ -181,11 +202,18 @@ Avoid using `@` symbols in `POSTGRES_PASSWORD` as they can cause connection issu
 The n8n-mcp service allows Claude Desktop to interact with n8n workflows via the Model Context Protocol (MCP).
 
 **Setup steps:**
+
 1. Generate required credentials in `.env`:
    - `N8N_API_KEY`: Create in n8n at Settings → API
    - `N8N_MCP_AUTH_TOKEN`: Generate with `openssl rand -base64 32`
 
-2. Configure Claude Desktop (Windows: `%APPDATA%\Claude\claude_desktop_config.json`):
+2. Configure Claude Desktop:
+   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+   Add this configuration:
+
    ```json
    {
      "mcpServers": {
@@ -200,22 +228,99 @@ The n8n-mcp service allows Claude Desktop to interact with n8n workflows via the
 3. Restart Claude Desktop to load the configuration
 
 **Access:**
-- Health endpoint: http://localhost:3002/health
-- MCP endpoint: http://localhost:3002/mcp
+
+- Health endpoint: <http://localhost:3002/health>
+- MCP endpoint: <http://localhost:3002/mcp>
 - Caddy (production): Port 8009 or custom hostname via `N8N_MCP_HOSTNAME`
 
-**Important:** The n8n-mcp container depends on the n8n service being started first. It automatically starts when you run `python start_services.py`.
+**Important:** The n8n-mcp container (internal port 3000, external port 3002) depends on the n8n service being started first. It automatically starts when you run `python start_services.py`.
+
+**Troubleshooting:**
+
+- Check container health: `docker ps | grep n8n-mcp`
+- View logs: `docker logs n8n-mcp --tail 50`
+- Test health: `curl http://localhost:3002/health`
 
 For detailed documentation, see `n8n-mcp/README.md` and `n8n-mcp/CLAUDE_DESKTOP_CONFIG.md`.
 
 ## Troubleshooting Notes
 
+- **Docker Compose Startup Failures**: If you see "dependency failed to start: 500 Internal Server Error" during startup, this is usually a transient health check failure (typically from Clickhouse during initialization). The `start_services.py` script includes automatic retry logic (up to 3 attempts with 15-second delays) to handle this. If it persists after 3 attempts, check individual service logs with `docker compose -p localai logs <service-name>`.
 - **Supabase Pooler Restarting**: See GitHub issue #30210 in supabase/supabase repo
 - **Supabase Analytics Startup Failure**: Delete `supabase/docker/volumes/db/data` folder after changing Postgres password
 - **Docker Desktop**: Enable "Expose daemon on tcp://localhost:2375 without TLS" in settings
 - **Windows GPU Support**: Enable WSL 2 backend in Docker Desktop settings
 - **Missing Supabase Files**: Delete entire `supabase/` folder and re-run `start_services.py`
 - **SearXNG First Run**: The script temporarily removes `cap_drop: - ALL` from docker-compose.yml on first run, then re-adds it for security
+- **Redis Authentication Warnings**: If you see "Redis connection error: ERR AUTH" in Langfuse logs, this was fixed in recent versions by removing `REDIS_AUTH` from the configuration since Redis/Valkey runs without authentication
+
+## Common Debugging Tasks
+
+### Checking Service Status
+
+```bash
+# View all running containers for the localai project
+docker compose -p localai ps
+
+# Check logs for a specific service
+docker compose -p localai logs -f <service-name>
+
+# Check logs for multiple services
+docker compose -p localai logs -f n8n ollama open-webui
+```
+
+### Restarting Individual Services
+
+```bash
+# Restart a single service without affecting others
+docker compose -p localai restart <service-name>
+
+# Example: Restart n8n after config changes
+docker compose -p localai restart n8n
+```
+
+### Accessing Service Health Endpoints
+
+- n8n: <http://localhost:5678/healthz>
+- n8n-mcp: <http://localhost:3002/health>
+- Ollama: <http://localhost:11434/api/tags>
+- Qdrant: <http://localhost:6333/dashboard>
+- Neo4j: <http://localhost:7474>
+- Langfuse: <http://localhost:3000>
+- Supabase Studio: <http://localhost:8000>
+
+### Verifying Ollama Models
+
+```bash
+# List downloaded models
+docker exec ollama ollama list
+
+# Pull a specific model manually
+docker exec ollama ollama pull qwen2.5:7b-instruct-q4_K_M
+
+# Test Ollama is responding
+curl http://localhost:11434/api/generate -d '{"model": "qwen2.5:7b-instruct-q4_K_M", "prompt": "Hello", "stream": false}'
+```
+
+### Debugging n8n Workflows
+
+- Check n8n logs: `docker compose -p localai logs -f n8n`
+- Access n8n container shell: `docker exec -it n8n sh`
+- Check shared volume mount: `ls -la ./shared` (host) or `ls -la /data/shared` (inside container)
+- Verify database connection: Check `DB_POSTGRESDB_HOST` points to `db` service
+
+### Resetting Services
+
+```bash
+# Remove all containers and volumes (DESTRUCTIVE - loses all data)
+docker compose -p localai -f docker-compose.yml --profile <profile> down -v
+
+# Remove only containers (keeps volumes/data)
+docker compose -p localai -f docker-compose.yml --profile <profile> down
+
+# Reset Supabase only
+docker compose -p localai -f supabase/docker/docker-compose.yml down -v
+```
 
 ## File Structure Highlights
 

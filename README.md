@@ -2,10 +2,10 @@
 
 **Self-hosted AI Package** is an open, docker compose template that
 quickly bootstraps a fully featured Local AI and Low Code development
-environment including Ollama for your local LLMs, Open WebUI for an interface to chat with your N8N agents, and Supabase for your database, vector store, and authentication. 
+environment including Ollama for your local LLMs, Open WebUI for an interface to chat with your N8N agents, and Supabase for your database, vector store, and authentication.
 
 This is Cole's version with a couple of improvements and the addition of Supabase, Open WebUI, Flowise, Neo4j, Langfuse, SearXNG, and Caddy!
-Also, the local RAG AI Agent workflows from the video will be automatically in your 
+Also, the local RAG AI Agent workflows from the video will be automatically in your
 n8n instance if you use this setup instead of the base one provided by n8n!
 
 **IMPORANT**: Supabase has updated a couple environment variables so you may have to add some new default values in your .env that I have in my .env.example if you have had this project up and running already and are just pulling new changes. Specifically, you need to add "POOLER_DB_POOL_SIZE=5" to your .env. This is required if you have had the package running before June 14th.
@@ -70,6 +70,7 @@ Before you begin, make sure you have the following software installed:
 ## Installation
 
 Clone the repository and navigate to the project directory:
+
 ```bash
 git clone -b stable https://github.com/coleam00/local-ai-packaged.git
 cd local-ai-packaged
@@ -124,6 +125,7 @@ Before running the services, you need to set up your environment variables for S
 > Make sure to generate secure random values for all secrets. Never use the example values in production.
 
 3. Set the following environment variables if deploying to production, otherwise leave commented:
+
    ```bash
    ############
    # Caddy Config
@@ -138,11 +140,18 @@ Before running the services, you need to set up your environment variables for S
    SEARXNG_HOSTNAME=searxng.yourdomain.com
    NEO4J_HOSTNAME=neo4j.yourdomain.com
    LETSENCRYPT_EMAIL=your-email-address
-   ```   
+   ```
 
 ---
 
 The project includes a `start_services.py` script that handles starting both the Supabase and local AI services. The script accepts a `--profile` flag to specify which GPU configuration to use.
+
+**Key features of the startup script:**
+
+- **Automatic retry logic**: Retries up to 3 times if health checks fail during startup
+- **Sequential startup**: Starts Supabase first, waits 20 seconds, then starts AI services
+- **Health check grace periods**: Configured to allow services adequate time to initialize
+- **Error handling**: Provides clear error messages and troubleshooting guidance if startup fails
 
 ### For Nvidia GPU users
 
@@ -171,6 +180,7 @@ If you're using a Mac with an M1 or newer processor, you can't expose your GPU t
    ```
 
 2. Run Ollama on your Mac for faster inference, and connect to that from the n8n instance:
+
    ```bash
    python start_services.py --profile none
    ```
@@ -189,11 +199,11 @@ x-n8n: &service-n8n
     - OLLAMA_HOST=host.docker.internal:11434
 ```
 
-Additionally, after you see "Editor is now accessible via: http://localhost:5678/":
+Additionally, after you see "Editor is now accessible via: <http://localhost:5678/>":
 
-1. Head to http://localhost:5678/home/credentials
+1. Head to <http://localhost:5678/home/credentials>
 2. Click on "Local Ollama service"
-3. Change the base URL to "http://host.docker.internal:11434/"
+3. Change the base URL to "<http://host.docker.internal:11434/>"
 
 ### For everyone else
 
@@ -202,15 +212,20 @@ python start_services.py --profile cpu
 ```
 
 ### The environment argument
+
 The **start-services.py** script offers the possibility to pass one of two options for the environment argument, **private** (default environment) and **public**:
+
 - **private:** you are deploying the stack in a safe environment, hence a lot of ports can be made accessible without having to worry about security
 - **public:** the stack is deployed in a public environment, which means the attack surface should be made as small as possible. All ports except for 80 and 443 are closed
 
 The stack initialized with
+
 ```bash
    python start_services.py --profile gpu-nvidia --environment private
    ```
+
 equals the one initialized with
+
 ```bash
    python start_services.py --profile gpu-nvidia
    ```
@@ -246,11 +261,10 @@ to the IP address of your cloud instance.
 
    For example, A record to point n8n to [cloud instance IP] for n8n.yourdomain.com
 
-
 **NOTE**: If you are using a cloud machine without the "docker compose" command available by default, such as a Ubuntu GPU instance on DigitalOcean, run these commands before running start_services.py:
 
-- DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\\" -f4)
-- sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+- DOCKER_COMPOSE_VERSION=$(curl -s <https://api.github.com/repos/docker/compose/releases/latest> | grep 'tag_name' | cut -d\\" -f4)
+- sudo curl -L "<https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64>" -o /usr/local/bin/docker-compose
 - sudo chmod +x /usr/local/bin/docker-compose
 - sudo mkdir -p /usr/local/lib/docker/cli-plugins
 - sudo ln -s /usr/local/bin/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
@@ -268,13 +282,13 @@ to get started.
 2. Open the included workflow:
    <http://localhost:5678/workflow/vTN9y2dLXqTiDfPT>
 3. Create credentials for every service:
-   
-   Ollama URL: http://ollama:11434
+
+   Ollama URL: <http://ollama:11434>
 
    Postgres (through Supabase): use DB, username, and password from .env. IMPORTANT: Host is 'db'
    Since that is the name of the service running Supabase
 
-   Qdrant URL: http://qdrant:6333 (API key can be whatever since this is running locally)
+   Qdrant URL: <http://qdrant:6333> (API key can be whatever since this is running locally)
 
    Google Drive: Follow [this guide from n8n](https://docs.n8n.io/integrations/builtin/credentials/google/).
    Don't use localhost for the redirect URI, just use another domain you have, it will still work!
@@ -285,7 +299,7 @@ to get started.
    console logs to check on the progress.
 6. Make sure to toggle the workflow as active and copy the "Production" webhook URL!
 7. Open <http://localhost:3000/> in your browser to set up Open WebUI.
-You’ll only have to do this once. You are NOT creating an account with Open WebUI in the 
+You’ll only have to do this once. You are NOT creating an account with Open WebUI in the
 setup here, it is only a local account for your instance!
 8. Go to Workspace -> Functions -> Add Function -> Give name + description then paste in
 the code from `n8n_pipe.py`
@@ -364,11 +378,27 @@ Replace `<your-profile>` with one of: `cpu`, `gpu-nvidia`, `gpu-amd`, or `none`.
 **Note**: The `start_services.py` script itself does not update containers - it only restarts them or pulls them if you are downloading these containers for the first time. To get the latest versions, you must explicitly run the commands above.
 
 **Containers that will be updated:**
+
 - n8n, n8n-mcp, Ollama, Open WebUI, Flowise, Qdrant, Neo4j, Langfuse, SearXNG, Caddy, and all Supabase services
 
 ## Troubleshooting
 
 Here are solutions to common issues you might encounter:
+
+### Docker Compose Startup Issues
+
+- **"dependency failed to start: 500 Internal Server Error"**: This error typically occurs during the initial startup when Clickhouse's health check transiently fails during initialization. The `start_services.py` script includes automatic retry logic (up to 3 attempts with 15-second delays between retries) to handle this. The startup sequence will automatically retry if health checks fail. If the issue persists after 3 attempts:
+  1. Check if Clickhouse is healthy: `docker ps | grep clickhouse`
+  2. View Clickhouse logs: `docker logs localai-clickhouse-1 --tail 50`
+  3. Check all service statuses: `docker compose -p localai ps`
+
+  **Technical details**: Clickhouse now has a 30-second startup grace period before health checks are considered failures, which should prevent this issue in normal circumstances.
+
+- **Redis Authentication Warnings**: If you see "ERR AUTH password called without any password configured" in Langfuse logs, this has been fixed in the current version. The Redis/Valkey container runs without authentication, and Langfuse is now configured to connect without credentials. If you upgraded from an older version, restart the Langfuse containers to apply the fix:
+
+  ```bash
+  docker restart localai-langfuse-worker-1 localai-langfuse-web-1
+  ```
 
 ### Supabase Issues
 
@@ -426,7 +456,7 @@ your local n8n instance.
 
 - [Tax Code Assistant](https://n8n.io/workflows/2341-build-a-tax-code-assistant-with-qdrant-mistralai-and-openai/)
 - [Breakdown Documents into Study Notes with MistralAI and Qdrant](https://n8n.io/workflows/2339-breakdown-documents-into-study-notes-using-templating-mistralai-and-qdrant/)
-- [Financial Documents Assistant using Qdrant and](https://n8n.io/workflows/2335-build-a-financial-documents-assistant-using-qdrant-and-mistralai/) [ Mistral.ai](http://mistral.ai/)
+- [Financial Documents Assistant using Qdrant and](https://n8n.io/workflows/2335-build-a-financial-documents-assistant-using-qdrant-and-mistralai/) [Mistral.ai](http://mistral.ai/)
 - [Recipe Recommendations with Qdrant and Mistral](https://n8n.io/workflows/2333-recipe-recommendations-with-qdrant-and-mistral/)
 
 ## Tips & tricks
