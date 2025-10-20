@@ -7,3 +7,6 @@ services:
 
   supavisor:
     ports: !reset null
+
+  n8n-mcp:
+    ports: !reset null

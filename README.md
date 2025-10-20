@@ -26,10 +26,13 @@ Curated by <https://github.com/n8n-io> and <https://github.com/coleam00>, it com
 platform with a curated list of compatible AI products and components to
 quickly get started with building self-hosted AI workflows.
 
-### What’s included
+### What's included
 
 ✅ [**Self-hosted n8n**](https://n8n.io/) - Low-code platform with over 400
 integrations and advanced AI components
+
+✅ [**n8n-mcp**](https://github.com/czlonkowski/n8n-mcp) - Model Context Protocol server
+for n8n that allows Claude Desktop to interact with your n8n workflows
 
 ✅ [**Supabase**](https://supabase.com/) - Open source database as a service -
 most widely used database for AI agents
@@ -47,9 +50,9 @@ builder that pairs very well with n8n
 store with an comprehensive API. Even though you can use Supabase for RAG, this was
 kept unlike Postgres since it's faster than Supabase so sometimes is the better option.
 
-✅ [**Neo4j**](https://neo4j.com/) - Knowledge graph engine that powers tools like GraphRAG, LightRAG, and Graphiti 
+✅ [**Neo4j**](https://neo4j.com/) - Knowledge graph engine that powers tools like GraphRAG, LightRAG, and Graphiti
 
-✅ [**SearXNG**](https://searxng.org/) - Open source, free internet metasearch engine which aggregates 
+✅ [**SearXNG**](https://searxng.org/) - Open source, free internet metasearch engine which aggregates
 results from up to 229 search services. Users are neither tracked nor profiled, hence the fit with the local AI package.
 
 ✅ [**Caddy**](https://caddyserver.com/) - Managed HTTPS/TLS for custom domains
@@ -76,12 +79,19 @@ Before running the services, you need to set up your environment variables for S
 
 1. Make a copy of `.env.example` and rename it to `.env` in the root directory of the project
 2. Set the following required environment variables:
+
    ```bash
    ############
    # N8N Configuration
    ############
    N8N_ENCRYPTION_KEY=
    N8N_USER_MANAGEMENT_JWT_SECRET=
+
+   ############
+   # N8N MCP Server (for Claude Desktop integration)
+   ############
+   N8N_API_KEY=                    # Create in n8n at Settings → API
+   N8N_MCP_AUTH_TOKEN=             # Generate with: openssl rand -base64 32
 
    ############
    # Supabase Secrets
@@ -96,7 +106,7 @@ Before running the services, you need to set up your environment variables for S
 
    ############
    # Neo4j Secrets
-   ############   
+   ############
    NEO4J_AUTH=
 
    ############
@@ -107,7 +117,7 @@ Before running the services, you need to set up your environment variables for S
    MINIO_ROOT_PASSWORD=
    LANGFUSE_SALT=
    NEXTAUTH_SECRET=
-   ENCRYPTION_KEY=  
+   ENCRYPTION_KEY=
    ```
 
 > [!IMPORTANT]
@@ -120,10 +130,11 @@ Before running the services, you need to set up your environment variables for S
    ############
 
    N8N_HOSTNAME=n8n.yourdomain.com
-   WEBUI_HOSTNAME=:openwebui.yourdomain.com
-   FLOWISE_HOSTNAME=:flowise.yourdomain.com
-   SUPABASE_HOSTNAME=:supabase.yourdomain.com
-   OLLAMA_HOSTNAME=:ollama.yourdomain.com
+   WEBUI_HOSTNAME=openwebui.yourdomain.com
+   FLOWISE_HOSTNAME=flowise.yourdomain.com
+   SUPABASE_HOSTNAME=supabase.yourdomain.com
+   N8N_MCP_HOSTNAME=n8n-mcp.yourdomain.com
+   OLLAMA_HOSTNAME=ollama.yourdomain.com
    SEARXNG_HOSTNAME=searxng.yourdomain.com
    NEO4J_HOSTNAME=neo4j.yourdomain.com
    LETSENCRYPT_EMAIL=your-email-address
@@ -154,6 +165,7 @@ python start_services.py --profile gpu-amd
 If you're using a Mac with an M1 or newer processor, you can't expose your GPU to the Docker instance, unfortunately. There are two options in this case:
 
 1. Run the starter kit fully on CPU:
+
    ```bash
    python start_services.py --profile cpu
    ```
@@ -282,10 +294,41 @@ the code from `n8n_pipe.py`
 
 9. Click on the gear icon and set the n8n_url to the production URL for the webhook
 you copied in a previous step.
-10. Toggle the function on and now it will be available in your model dropdown in the top left! 
+10. Toggle the function on and now it will be available in your model dropdown in the top left!
+
+### Optional: Claude Desktop Integration with n8n
+
+To enable Claude Desktop to interact with your n8n workflows via the Model Context Protocol (MCP):
+
+1. Make sure you have `N8N_API_KEY` and `N8N_MCP_AUTH_TOKEN` set in your `.env` file (see step 2 above)
+2. The n8n-mcp service starts automatically when you run `start_services.py`
+3. Configure Claude Desktop by editing your config file:
+   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+4. Add this to your Claude Desktop config:
+
+   ```json
+   {
+     "mcpServers": {
+       "n8n-mcp": {
+         "command": "docker",
+         "args": ["exec", "-i", "n8n-mcp", "node", "dist/mcp/index.js"]
+       }
+     }
+   }
+   ```
+
+5. Restart Claude Desktop and ask it to "List my n8n workflows"
+
+For detailed setup instructions, see [N8N_MCP_INTEGRATION.md](N8N_MCP_INTEGRATION.md).
+
+---
 
 To open n8n at any time, visit <http://localhost:5678/> in your browser.
-To open Open WebUI at any time, visit <http://localhost:3000/>.
+To open Open WebUI at any time, visit <http://localhost:8080/>.
+To check n8n-mcp health, visit <http://localhost:3002/health>.
 
 With your n8n instance, you’ll have access to over 400 integrations and a
 suite of basic and advanced AI nodes such as
@@ -303,13 +346,13 @@ language model and Qdrant as your vector store.
 
 ## Upgrading
 
-To update all containers to their latest versions (n8n, Open WebUI, etc.), run these commands:
+To update all containers to their latest versions (n8n, n8n-mcp, Open WebUI, etc.), run these commands:
 
 ```bash
 # Stop all services
 docker compose -p localai -f docker-compose.yml --profile <your-profile> down
 
-# Pull latest versions of all containers
+# Pull latest versions of all containers (including n8n-mcp)
 docker compose -p localai -f docker-compose.yml --profile <your-profile> pull
 
 # Start services again with your desired profile
@@ -318,7 +361,10 @@ python start_services.py --profile <your-profile>
 
 Replace `<your-profile>` with one of: `cpu`, `gpu-nvidia`, `gpu-amd`, or `none`.
 
-Note: The `start_services.py` script itself does not update containers - it only restarts them or pulls them if you are downloading these containers for the first time. To get the latest versions, you must explicitly run the commands above.
+**Note**: The `start_services.py` script itself does not update containers - it only restarts them or pulls them if you are downloading these containers for the first time. To get the latest versions, you must explicitly run the commands above.
+
+**Containers that will be updated:**
+- n8n, n8n-mcp, Ollama, Open WebUI, Flowise, Qdrant, Neo4j, Langfuse, SearXNG, Caddy, and all Supabase services
 
 ## Troubleshooting
 

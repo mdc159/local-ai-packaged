@@ -1,5 +1,5 @@
 {
-  "name": "V1 ocal RAG AI Agent",
+  "name": "V1 Local RAG AI Agent - Local Files",
   "nodes": [
     {
       "parameters": {},
@@ -93,73 +93,39 @@
     },
     {
       "parameters": {
-        "pollTimes": {
-          "item": [
-            {
-              "mode": "everyMinute"
-            }
-          ]
-        },
-        "triggerOn": "specificFolder",
-        "folderToWatch": {
-          "__rl": true,
-          "value": "1914m3M7kRzkd5RJqAfzRY9EBcJrKemZC",
-          "mode": "list",
-          "cachedResultName": "Meeting Notes",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/1914m3M7kRzkd5RJqAfzRY9EBcJrKemZC"
-        },
-        "event": "fileCreated",
+        "triggerOn": "folder",
+        "path": "/shared/documents",
+        "events": [
+          "add"
+        ],
         "options": {}
       },
       "id": "41fb71dd-236a-48bc-9761-5841d52ca1b3",
-      "name": "File Created",
-      "type": "n8n-nodes-base.googleDriveTrigger",
+      "name": "Local File Added Trigger",
+      "type": "n8n-nodes-base.localFileTrigger",
       "typeVersion": 1,
       "position": [
         600,
         880
-      ],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "vzcL2pD7uQzqDpdK",
-          "name": "Google Drive account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
-        "pollTimes": {
-          "item": [
-            {
-              "mode": "everyMinute"
-            }
-          ]
-        },
-        "triggerOn": "specificFolder",
-        "folderToWatch": {
-          "__rl": true,
-          "value": "1914m3M7kRzkd5RJqAfzRY9EBcJrKemZC",
-          "mode": "list",
-          "cachedResultName": "Meeting Notes",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/1914m3M7kRzkd5RJqAfzRY9EBcJrKemZC"
-        },
-        "event": "fileUpdated",
+        "triggerOn": "folder",
+        "path": "/shared/documents",
+        "events": [
+          "change"
+        ],
         "options": {}
       },
       "id": "7b904686-89ae-4722-9ce5-a9da1b13b1a1",
-      "name": "File Updated",
-      "type": "n8n-nodes-base.googleDriveTrigger",
+      "name": "Local File Changed Trigger",
+      "type": "n8n-nodes-base.localFileTrigger",
       "typeVersion": 1,
       "position": [
         600,
         1100
-      ],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "vzcL2pD7uQzqDpdK",
-          "name": "Google Drive account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -167,14 +133,14 @@
           "assignments": [
             {
               "id": "10646eae-ae46-4327-a4dc-9987c2d76173",
-              "name": "file_id",
-              "value": "={{ $json.id }}",
+              "name": "file_path",
+              "value": "={{ $json.path }}",
               "type": "string"
             },
             {
               "id": "dd0aa081-79e7-4714-8a67-1e898285554c",
-              "name": "folder_id",
-              "value": "={{ $json.parents[0] }}",
+              "name": "file_name",
+              "value": "={{ $json.name }}",
               "type": "string"
             }
           ]
@@ -192,35 +158,19 @@
     },
     {
       "parameters": {
-        "operation": "download",
-        "fileId": {
-          "__rl": true,
-          "value": "={{ $('Set File ID').item.json.file_id }}",
-          "mode": "id"
-        },
-        "options": {
-          "googleFileConversion": {
-            "conversion": {
-              "docsToFormat": "text/plain"
-            }
-          }
-        }
+        "operation": "read",
+        "fileSelector": "={{ $('Set File ID').item.json.file_path }}",
+        "options": {}
       },
       "id": "9f1e08fb-4ef3-4c4d-9473-5a7a1608b8e3",
-      "name": "Download File",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
+      "name": "Read Local File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
       "position": [
         1300,
         880
       ],
-      "executeOnce": true,
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "vzcL2pD7uQzqDpdK",
-          "name": "Google Drive account"
-        }
-      }
+      "executeOnce": true
     },
     {
       "parameters": {
@@ -243,12 +193,12 @@
           "metadata": {
             "metadataValues": [
               {
-                "name": "file_id",
-                "value": "={{ $('Set File ID').item.json.file_id }}"
+                "name": "file_path",
+                "value": "={{ $('Set File ID').item.json.file_path }}"
               },
               {
-                "name": "folder_id",
-                "value": "={{ $('Set File ID').item.json.folder_id }}"
+                "name": "file_name",
+                "value": "={{ $('Set File ID').item.json.file_name }}"
               }
             ]
           }
@@ -329,7 +279,7 @@
     },
     {
       "parameters": {
-        "content": "## Workflow to Create Local Knowledgebase from Google Drive Folder",
+        "content": "## Workflow to Create Local Knowledgebase from Local Folder",
         "height": 705.2695614889159,
         "width": 1568.9362829025763,
         "color": 5
@@ -386,7 +336,7 @@
       "parameters": {
         "code": {
           "execute": {
-            "code": "const { QdrantVectorStore } = require(\"@langchain/qdrant\");\nconst { OllamaEmbeddings } = require(\"@langchain/community/embeddings/ollama\");\n\nconst embeddings = new OllamaEmbeddings({\n  model: \"nomic-embed-text\",\n  baseUrl: \"http://ollama:11434\"\n});\n\nconst vectorStore = await QdrantVectorStore.fromExistingCollection(\n  embeddings,\n  {\n    url: \"http://qdrant:6333\",\n    collectionName: \"documents\",\n  }\n);\n\nconst fileIdToDelete = this.getInputData()[0].json.file_id;\n\nconst filter = {\n        must: [\n            {\n                key: \"metadata.file_id\",\n                match: {\n                    value: fileIdToDelete,\n                },\n            },\n        ],\n    }\n\n// const results = await vectorStore.similaritySearch(\"this\", 10, filter);\n// const idsToDelete = results.map((doc) => doc.id);\n\n// NOT IMPLEMENTED!\n// await vectorStore.delete({ ids: idsToDelete });\n\nvectorStore.client.delete(\"documents\", {\n  filter\n});\n\nreturn [ {json: { file_id: fileIdToDelete } } ];\n"
+            "code": "const { QdrantVectorStore } = require(\"@langchain/qdrant\");\nconst { OllamaEmbeddings } = require(\"@langchain/community/embeddings/ollama\");\n\nconst embeddings = new OllamaEmbeddings({\n  model: \"nomic-embed-text\",\n  baseUrl: \"http://ollama:11434\"\n});\n\nconst vectorStore = await QdrantVectorStore.fromExistingCollection(\n  embeddings,\n  {\n    url: \"http://qdrant:6333\",\n    collectionName: \"documents\",\n  }\n);\n\nconst filePathToDelete = this.getInputData()[0].json.file_path;\n\nconst filter = {\n        must: [\n            {\n                key: \"metadata.file_path\",\n                match: {\n                    value: filePathToDelete,\n                },\n            },\n        ],\n    }\n\n// const results = await vectorStore.similaritySearch(\"this\", 10, filter);\n// const idsToDelete = results.map((doc) => doc.id);\n\n// NOT IMPLEMENTED!\n// await vectorStore.delete({ ids: idsToDelete });\n\nvectorStore.client.delete(\"documents\", {\n  filter\n});\n\nreturn [ {json: { file_id: filePathToDelete } } ];\n"
           }
         },
         "inputs": {
@@ -560,7 +510,7 @@
         ]
       ]
     },
-    "File Created": {
+    "Local File Added Trigger": {
       "main": [
         [
           {
@@ -571,7 +521,7 @@
         ]
       ]
     },
-    "File Updated": {
+    "Local File Changed Trigger": {
       "main": [
         [
           {
@@ -593,7 +543,7 @@
         ]
       ]
     },
-    "Download File": {
+    "Read Local File": {
       "main": [
         [
           {

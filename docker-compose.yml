@@ -109,6 +109,31 @@ services:
       n8n-import:
         condition: service_completed_successfully
 
+  n8n-mcp:
+    image: ghcr.io/czlonkowski/n8n-mcp:latest
+    container_name: n8n-mcp
+    restart: unless-stopped
+    expose:
+      - 3000/tcp
+    environment:
+      - MCP_MODE=http
+      - PORT=3000
+      - AUTH_TOKEN=${N8N_MCP_AUTH_TOKEN}
+      - N8N_API_URL=http://n8n:5678
+      - N8N_API_KEY=${N8N_API_KEY}
+      - WEBHOOK_SECURITY_MODE=${N8N_MCP_WEBHOOK_SECURITY_MODE:-moderate}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      n8n:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant
@@ -160,6 +185,7 @@ services:
       - SEARXNG_HOSTNAME=${SEARXNG_HOSTNAME:-":8006"}
       - LANGFUSE_HOSTNAME=${LANGFUSE_HOSTNAME:-":8007"}
       - NEO4J_HOSTNAME=${NEO4J_HOSTNAME:-":8008"}
+      - N8N_MCP_HOSTNAME=${N8N_MCP_HOSTNAME:-":8009"}
       - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-internal}
     cap_drop:
       - ALL

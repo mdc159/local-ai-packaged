@@ -10,6 +10,11 @@
     reverse_proxy n8n:5678
 }
 
+# N8N MCP Server
+{$N8N_MCP_HOSTNAME} {
+    reverse_proxy n8n-mcp:3000
+}
+
 # Open WebUI
 {$WEBUI_HOSTNAME} {
     reverse_proxy open-webui:8080
