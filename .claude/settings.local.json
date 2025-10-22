@@ -5,7 +5,10 @@
       "Bash(curl -s http://localhost:5678/api/v1/workflows -H \"X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmMjFiZDk2Yi0xOWVlLTQ1N2QtYWJjZS0xNmM3ZDBkYzY2OGIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzYwMTU3Nzc4fQ.TdXSFN8LwtIbRs80rIUkNGo7dVft_HZlc_T0eh3mAVo\")",
       "Bash(docker logs n8n-mcp --tail 30)",
       "Bash(docker exec n8n-mcp node dist/mcp/index.js --help)",
-      "Bash(python -c \"import sys, json; data = json.load(sys.stdin); print(json.dumps([{''''id'''': w[''''id''''], ''''name'''': w[''''name''''], ''''active'''': w[''''active'''']} for w in data[''''data'''']], indent=2))\")"
+      "Bash(python -c \"import sys, json; data = json.load(sys.stdin); print(json.dumps([{''''id'''': w[''''id''''], ''''name'''': w[''''name''''], ''''active'''': w[''''active'''']} for w in data[''''data'''']], indent=2))\")",
+      "Bash(cat:*)",
+      "Bash(git submodule:*)",
+      "Bash(git ls-tree:*)"
     ],
     "deny": [],
     "ask": []
