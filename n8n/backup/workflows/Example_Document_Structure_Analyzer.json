@@ -1,0 +1,83 @@
+{
+  "name": "Example: Document Structure Analyzer",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Document Structure Analyzer\n\nThis workflow demonstrates how to:\n1. Accept a document path via webhook\n2. Convert it to JSON format using Docling\n3. Analyze the document structure (headings, tables, etc.)\n4. Return structured metadata\n\n**Test it:**\nPOST to webhook with: {\"file_path\": \"/data/shared/document.pdf\"}",
+        "height": 360,
+        "width": 500
+      },
+      "id": "sticky-note-1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, 220]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze-document",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [360, 340],
+      "webhookId": "analyze-document-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docling:5001/v1/convert",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"source\": {\"type\": \"path\", \"path\": $json.body.file_path}, \"output\": {\"format\": \"json\"}} }}",
+        "options": {}
+      },
+      "id": "http-request-1",
+      "name": "Convert to JSON with Docling",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [580, 340]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Analyze document structure from Docling JSON output\nconst item = items[0].json;\nconst doc = item.content;\n\n// Count different element types\nconst elements = doc.main_text || [];\nconst tables = doc.tables || [];\nconst figures = doc.figures || [];\n\n// Extract headings\nconst headings = [];\nif (elements) {\n  for (const el of elements) {\n    if (el.type && el.type.includes('heading')) {\n      headings.push({\n        level: el.level || 'unknown',\n        text: el.text || ''\n      });\n    }\n  }\n}\n\n// Calculate statistics\nconst stats = {\n  total_pages: doc.pages ? doc.pages.length : 0,\n  total_elements: elements.length,\n  total_tables: tables.length,\n  total_figures: figures.length,\n  total_headings: headings.length,\n  document_name: doc.name || 'unknown',\n  headings: headings,\n  has_tables: tables.length > 0,\n  has_figures: figures.length > 0\n};\n\nreturn {\n  json: {\n    status: 'success',\n    document_analysis: stats\n  }\n};"
+      },
+      "id": "code-1",
+      "name": "Analyze Structure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 340]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "respond-1",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1020, 340]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Convert to JSON with Docling", "type": "main", "index": 0}]]
+    },
+    "Convert to JSON with Docling": {
+      "main": [[{"node": "Analyze Structure", "type": "main", "index": 0}]]
+    },
+    "Analyze Structure": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

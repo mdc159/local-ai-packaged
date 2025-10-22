@@ -134,6 +134,22 @@ services:
       retries: 3
       start_period: 40s
 
+  docling:
+    image: quay.io/docling-project/docling-serve:latest
+    container_name: docling
+    restart: unless-stopped
+    expose:
+      - 5001/tcp
+    environment:
+      - DOCLING_HOST=0.0.0.0
+      - DOCLING_PORT=5001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant
@@ -186,6 +202,7 @@ services:
       - LANGFUSE_HOSTNAME=${LANGFUSE_HOSTNAME:-":8007"}
       - NEO4J_HOSTNAME=${NEO4J_HOSTNAME:-":8008"}
       - N8N_MCP_HOSTNAME=${N8N_MCP_HOSTNAME:-":8009"}
+      - DOCLING_HOSTNAME=${DOCLING_HOSTNAME:-":8010"}
       - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-internal}
     cap_drop:
       - ALL

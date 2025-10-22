@@ -1,0 +1,88 @@
+{
+  "name": "Example: Batch PDF Converter",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Batch PDF to Markdown Converter\n\nThis workflow demonstrates how to:\n1. Watch a folder for new PDF files\n2. Convert them to markdown using Docling\n3. Save the markdown output to a file\n\n**Usage:**\n- Drop PDF files into /data/shared/pdf_input\n- Markdown files will be created in /data/shared/pdf_output",
+        "height": 320,
+        "width": 480
+      },
+      "id": "sticky-note-1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-180, 240]
+    },
+    {
+      "parameters": {
+        "triggerOn": "folder",
+        "path": "/data/shared/pdf_input",
+        "events": ["add"],
+        "options": {
+          "followSymlinks": true,
+          "usePolling": true
+        }
+      },
+      "id": "file-trigger-1",
+      "name": "Watch for PDF Files",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [340, 340]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docling:5001/v1/convert",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"source\": {\"type\": \"path\", \"path\": $json.path}, \"output\": {\"format\": \"markdown\"}} }}",
+        "options": {}
+      },
+      "id": "http-request-1",
+      "name": "Convert PDF with Docling",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 340]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Extract content and prepare for file write\nconst item = items[0].json;\nconst filename = item.metadata.source.path.split(/[\\\\\\/]/).pop().replace('.pdf', '.md');\nconst content = item.content;\nconst outputPath = `/data/shared/pdf_output/${filename}`;\n\nreturn {\n  json: {\n    content: content,\n    filename: outputPath\n  }\n};"
+      },
+      "id": "code-1",
+      "name": "Prepare Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 340]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.filename }}",
+        "data": "={{ $json.content }}",
+        "options": {}
+      },
+      "id": "write-file-1",
+      "name": "Save Markdown File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1000, 340]
+    }
+  ],
+  "connections": {
+    "Watch for PDF Files": {
+      "main": [[{"node": "Convert PDF with Docling", "type": "main", "index": 0}]]
+    },
+    "Convert PDF with Docling": {
+      "main": [[{"node": "Prepare Output", "type": "main", "index": 0}]]
+    },
+    "Prepare Output": {
+      "main": [[{"node": "Save Markdown File", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

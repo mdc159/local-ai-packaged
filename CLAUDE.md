@@ -25,6 +25,7 @@ Private mode port mappings (localhost only) are shown in parentheses. In public 
 
 - **n8n**: Low-code workflow automation platform (5678) - primary orchestration tool for AI agents
 - **n8n-mcp**: n8n Model Context Protocol server (3002) - allows Claude Desktop to interact with n8n workflows
+- **Docling**: Advanced document parser (5001) - converts PDFs, DOCX, PPTX, XLSX, images to Markdown/JSON for RAG
 - **Ollama**: Local LLM runtime (11434) - runs models like qwen2.5:7b-instruct-q4_K_M
 - **Open WebUI**: ChatGPT-like interface (8080) - interacts with n8n agents via `n8n_pipe.py`
 - **Supabase**: Database, vector store, and auth (Kong API on port 8000)
@@ -127,6 +128,7 @@ Optional production Caddy config:
 
 When configuring credentials in n8n:
 - **Ollama**: `http://ollama:11434` (or `http://host.docker.internal:11434` if running Ollama natively on Mac)
+- **Docling**: `http://docling:5001` (API endpoint: `/v1/convert`)
 - **Postgres (Supabase)**: Host is `db` (not localhost), use credentials from `.env`
 - **Qdrant**: `http://qdrant:6333`
 - **Neo4j**: `bolt://neo4j:7687` or `http://neo4j:7474`
@@ -234,6 +236,52 @@ The n8n-mcp service allows Claude Desktop to interact with n8n workflows via the
 - Caddy (production): Port 8009 or custom hostname via `N8N_MCP_HOSTNAME`
 
 **Important:** The n8n-mcp container (internal port 3000, external port 3002) depends on the n8n service being started first. It automatically starts when you run `python start_services.py`.
+
+### Docling Document Parser Integration
+
+Docling is an advanced document parser that converts complex documents into structured formats for RAG systems.
+
+**Supported formats:**
+- PDFs (with advanced table/image extraction)
+- Microsoft Office: DOCX, PPTX, XLSX
+- Images: PNG, TIFF, JPEG
+- HTML, Audio (WAV, MP3), Subtitles (VTT)
+
+**Access:**
+- API endpoint: <http://localhost:5001> (private mode)
+- Documentation: <http://localhost:5001/docs>
+- Web UI: <http://localhost:5001/ui>
+- Caddy (production): Port 8010 or custom hostname via `DOCLING_HOSTNAME`
+
+**Using Docling in n8n workflows:**
+
+In HTTP Request nodes, use:
+- **URL**: `http://docling:5001/v1/convert`
+- **Method**: POST
+- **Body**: JSON with document URL or file upload
+- **Headers**: `Content-Type: application/json`
+
+Example JSON payload for URL-based conversion:
+```json
+{
+  "source": {
+    "type": "url",
+    "url": "https://example.com/document.pdf"
+  },
+  "output": {
+    "format": "markdown"
+  }
+}
+```
+
+For local files in the `./shared` folder, first upload the file to a temporary web-accessible location or use multipart form upload.
+
+**Benefits for RAG:**
+- Superior PDF parsing with table structure preservation
+- Image and diagram extraction from documents
+- Markdown output ideal for vector embeddings
+- JSON structured output for precise data extraction
+- Handles complex layouts better than basic text extraction
 
 **Troubleshooting:**
 

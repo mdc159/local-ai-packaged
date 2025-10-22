@@ -1,0 +1,128 @@
+{
+  "name": "Example: Multi-Format Document Converter",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Multi-Format Document Converter\n\nThis workflow demonstrates how to:\n1. Accept file upload via HTTP\n2. Auto-detect file format\n3. Convert using Docling\n4. Return converted content\n\n**Supported formats:**\nPDF, DOCX, PPTX, XLSX, HTML, PNG, JPEG, TIFF\n\n**Test it:**\ncurl -X POST -F \"file=@document.pdf\" http://localhost:5678/webhook/convert-document",
+        "height": 440,
+        "width": 520
+      },
+      "id": "sticky-note-1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-220, 180]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "convert-document",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [360, 360],
+      "webhookId": "convert-document-webhook"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ '/data/shared/temp/' + $json.data.files[0].filename }}",
+        "data": "={{ $json.data.files[0].data }}",
+        "options": {}
+      },
+      "id": "write-temp-file",
+      "name": "Save Uploaded File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [580, 360]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "file-path",
+              "name": "temp_file_path",
+              "value": "={{ '/data/shared/temp/' + $('Webhook').item.json.data.files[0].filename }}",
+              "type": "string"
+            },
+            {
+              "id": "file-ext",
+              "name": "file_extension",
+              "value": "={{ $('Webhook').item.json.data.files[0].filename.split('.').pop().toLowerCase() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-fields",
+      "name": "Set File Info",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [800, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://docling:5001/v1/convert",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"source\": {\"type\": \"path\", \"path\": $json.temp_file_path}, \"output\": {\"format\": \"markdown\"}} }}",
+        "options": {}
+      },
+      "id": "http-request-docling",
+      "name": "Convert with Docling",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Clean up temp file and prepare response\nconst fs = require('fs');\nconst item = items[0].json;\nconst tempPath = $('Set File Info').item.json.temp_file_path;\n\n// Delete temp file\nif (fs.existsSync(tempPath)) {\n  fs.unlinkSync(tempPath);\n}\n\n// Return converted content\nreturn {\n  json: {\n    status: 'success',\n    format: item.format,\n    original_file: $('Webhook').item.json.data.files[0].filename,\n    pages: item.metadata?.pages || 'unknown',\n    content: item.content,\n    message: 'Document successfully converted to markdown'\n  }\n};"
+      },
+      "id": "code-cleanup",
+      "name": "Clean Up and Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1240, 360]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1460, 360]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Save Uploaded File", "type": "main", "index": 0}]]
+    },
+    "Save Uploaded File": {
+      "main": [[{"node": "Set File Info", "type": "main", "index": 0}]]
+    },
+    "Set File Info": {
+      "main": [[{"node": "Convert with Docling", "type": "main", "index": 0}]]
+    },
+    "Convert with Docling": {
+      "main": [[{"node": "Clean Up and Format Response", "type": "main", "index": 0}]]
+    },
+    "Clean Up and Format Response": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
