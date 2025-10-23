@@ -350,7 +350,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
     volumes:
-      - langfuse_postgres_data:/var/lib/postgresql/data              
+      - langfuse_postgres_data:/var/lib/postgresql              
 
   redis:
     container_name: redis

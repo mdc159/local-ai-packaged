@@ -1,0 +1,121 @@
+{
+  "name": "Example: Graphiti Memory Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Graphiti Memory Agent\n\nThis workflow demonstrates an AI agent with episodic memory:\n1. User sends chat message via webhook\n2. Agent searches Graphiti knowledge graph for relevant context\n3. Agent responds with context-aware answer\n4. Conversation is stored as an episode in Graphiti\n\n**Test it:**\nPOST /webhook/graphiti-chat\n{\"message\": \"I met with Sarah from TechCorp today\", \"user_id\": \"user123\"}",
+        "height": 400,
+        "width": 540
+      },
+      "id": "sticky-note-1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-220, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "graphiti-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [340, 340],
+      "webhookId": "graphiti-chat-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://graphiti:5002/v1/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"query\": $json.body.message, \"num_results\": 5} }}",
+        "options": {}
+      },
+      "id": "http-search",
+      "name": "Search Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 340]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Format search results as context for the LLM\nconst searchData = items[0].json;\nconst results = searchData.results || [];\n\nconst context = results.map(r => \n  `- ${r.name}: ${r.content} (score: ${r.score})`\n).join('\\n');\n\nreturn {\n  json: {\n    message: $('Webhook').first().json.body.message,\n    user_id: $('Webhook').first().json.body.user_id,\n    context: context || 'No relevant context found',\n    hasContext: results.length > 0\n  }\n};"
+      },
+      "id": "code-format",
+      "name": "Format Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 340]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"model\": \"qwen2.5:7b-instruct-q4_K_M\",\n  \"prompt\": `You are a helpful assistant with memory. Here is relevant context from past conversations:\\n\\n${$json.context}\\n\\nUser message: ${$json.message}\\n\\nProvide a helpful, context-aware response:`,\n  \"stream\": false\n} }}",
+        "options": {}
+      },
+      "id": "http-llm",
+      "name": "Generate Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 340]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://graphiti:5002/v1/episodes",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"name\": `Chat with ${$('Format Context').first().json.user_id}`,\n  \"content\": `User: ${$('Format Context').first().json.message}\\n\\nAssistant: ${$json.response}`,\n  \"source\": \"chat\",\n  \"source_description\": \"User conversation\"\n} }}",
+        "options": {}
+      },
+      "id": "http-store",
+      "name": "Store Episode",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 340]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\"response\": $('Generate Response').first().json.response, \"episode_stored\": true} }}",
+        "options": {}
+      },
+      "id": "respond-1",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 340]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Search Memory", "type": "main", "index": 0}]]
+    },
+    "Search Memory": {
+      "main": [[{"node": "Format Context", "type": "main", "index": 0}]]
+    },
+    "Format Context": {
+      "main": [[{"node": "Generate Response", "type": "main", "index": 0}]]
+    },
+    "Generate Response": {
+      "main": [[{"node": "Store Episode", "type": "main", "index": 0}]]
+    },
+    "Store Episode": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

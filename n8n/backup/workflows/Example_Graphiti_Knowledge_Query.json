@@ -1,0 +1,85 @@
+{
+  "name": "Example: Graphiti Knowledge Query",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Graphiti Knowledge Query Interface\n\nSimple query interface for the knowledge graph:\n1. Send natural language question via webhook\n2. Search Graphiti for relevant entities and facts\n3. Format results in a readable way\n4. Return answer with source attribution\n\n**Test it:**\ncurl -X POST http://localhost:5678/webhook/graphiti-query \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"question\": \"What do we know about Acme Corp?\"}'",
+        "height": 420,
+        "width": 560
+      },
+      "id": "sticky-note-1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-240, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "graphiti-query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [360, 360],
+      "webhookId": "graphiti-query-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://graphiti:5002/v1/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"query\": $json.body.question, \"num_results\": 10} }}",
+        "options": {}
+      },
+      "id": "http-search",
+      "name": "Search Knowledge Graph",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [580, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Format results nicely\nconst searchData = items[0].json;\nconst results = searchData.results || [];\nconst question = $('Webhook').first().json.body.question;\n\nif (results.length === 0) {\n  return {\n    json: {\n      question: question,\n      answer: \"I don't have any information about that in my knowledge base.\",\n      sources: [],\n      num_sources: 0\n    }\n  };\n}\n\n// Group by score tiers\nconst highRelevance = results.filter(r => r.score > 0.8);\nconst medRelevance = results.filter(r => r.score > 0.5 && r.score <= 0.8);\n\n// Build answer from high relevance items\nconst answer = highRelevance.length > 0 \n  ? `Based on my knowledge:\\n\\n${highRelevance.map((r, i) => `${i+1}. ${r.content}`).join('\\n\\n')}`\n  : `Here's what I found (moderate relevance):\\n\\n${medRelevance.slice(0, 3).map((r, i) => `${i+1}. ${r.content}`).join('\\n\\n')}`;\n\n// Format sources\nconst sources = results.slice(0, 5).map(r => ({\n  entity: r.name,\n  content: r.content,\n  score: r.score,\n  date: r.created_at\n}));\n\nreturn {\n  json: {\n    question: question,\n    answer: answer,\n    sources: sources,\n    num_sources: results.length\n  }\n};"
+      },
+      "id": "code-format",
+      "name": "Format Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 360]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-1",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1020, 360]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Search Knowledge Graph", "type": "main", "index": 0}]]
+    },
+    "Search Knowledge Graph": {
+      "main": [[{"node": "Format Answer", "type": "main", "index": 0}]]
+    },
+    "Format Answer": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

@@ -28,7 +28,11 @@
       "Bash(findstr:*)",
       "Bash(docker logs:*)",
       "Bash(docker start:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Integrate Docling document parser for enhanced RAG workflows\n\nThis commit adds Docling, an advanced document parsing service, to the local AI stack\nwith comprehensive n8n workflow integration for superior document processing.\n\n## New Services\n- Docling API service (FastAPI) on port 5001\n- Supports PDF, DOCX, PPTX, XLSX, HTML, and image formats\n- GPU-accelerated OCR with RapidOCR\n- Multiple output formats: Markdown, JSON, Text\n\n## n8n Workflows\n- V4 Local Agentic RAG with Docling: Enhanced version of V3 using Docling for PDF/DOCX/PPTX parsing\n- Example: Batch PDF Converter: Automated folder-watching PDF to Markdown conversion\n- Example: Document Structure Analyzer: Extract document metadata and structure via webhook\n- Example: Multi-Format Document Converter: HTTP upload endpoint for any document format\n\n## Infrastructure Changes\n- docker-compose.yml: Added Docling service with health checks\n- Caddyfile: Added reverse proxy route for Docling (port 8005)\n- docker-compose.override.private.yml: Added port mapping for local development\n- .env.example: Added DOCLING_HOSTNAME configuration option\n\n## Documentation\n- DOCLING_INTEGRATION_GUIDE.md: Complete setup and usage guide\n- docling-service/README.md: API documentation and examples\n- CLAUDE.md: Updated with Docling service details and connection strings\n\n## Key Features\n- Superior PDF parsing with better table detection and layout analysis\n- Multi-format document support (PDF, DOCX, PPTX, XLSX)\n- Structure preservation (headings, lists, formatting)\n- Built-in OCR for scanned documents\n- Clean markdown output optimized for RAG retrieval\n- GPU acceleration support for faster processing\n\nTested with multiple PDFs including complex documents with tables and multi-column layouts.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Read(//x/GitHub/TJNights/**)",
+      "Bash(docker volume:*)"
     ],
     "deny": [],
     "ask": []

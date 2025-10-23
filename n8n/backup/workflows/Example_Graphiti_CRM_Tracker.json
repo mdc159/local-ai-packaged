@@ -1,0 +1,100 @@
+{
+  "name": "Example: Graphiti CRM Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Graphiti CRM Interaction Tracker\n\nTrack customer interactions as temporal knowledge:\n1. Watch for new interaction logs (could be from CRM webhook)\n2. Extract key information about the interaction\n3. Store as episode in Graphiti knowledge graph\n4. Build relationship graph between customers, products, and needs\n\n**Usage:**\nCreate files in /data/shared/crm_interactions/ with interaction details",
+        "height": 440,
+        "width": 560
+      },
+      "id": "sticky-note-1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-240, 180]
+    },
+    {
+      "parameters": {
+        "triggerOn": "folder",
+        "path": "/data/shared/crm_interactions",
+        "events": ["add"],
+        "options": {
+          "followSymlinks": true,
+          "usePolling": true
+        }
+      },
+      "id": "file-trigger",
+      "name": "Watch CRM Folder",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [360, 360]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.path }}",
+        "options": {}
+      },
+      "id": "read-file",
+      "name": "Read Interaction Log",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [580, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse interaction log (assuming JSON format)\nconst data = JSON.parse(items[0].binary.data);\nconst filename = $('Watch CRM Folder').first().json.path.split('/').pop().replace('.json', '');\n\nreturn {\n  json: {\n    name: `CRM: ${data.customer_name || 'Unknown'} - ${data.interaction_type || 'Contact'}`,\n    content: `Customer: ${data.customer_name}\\nCompany: ${data.company || 'N/A'}\\nType: ${data.interaction_type}\\nNotes: ${data.notes || ''}\\nProducts Discussed: ${(data.products || []).join(', ')}\\nNext Steps: ${data.next_steps || 'None'}`,\n    source: 'crm',\n    source_description: `CRM interaction log: ${filename}`,\n    reference_time: data.timestamp || new Date().toISOString()\n  }\n};"
+      },
+      "id": "code-parse",
+      "name": "Parse Interaction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://graphiti:5002/v1/episodes",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "http-graphiti",
+      "name": "Add to Knowledge Graph",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Log success\nconst result = items[0].json;\nconsole.log(`Stored CRM interaction: ${result.episode_uuid}`);\nreturn items;"
+      },
+      "id": "code-log",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1240, 360]
+    }
+  ],
+  "connections": {
+    "Watch CRM Folder": {
+      "main": [[{"node": "Read Interaction Log", "type": "main", "index": 0}]]
+    },
+    "Read Interaction Log": {
+      "main": [[{"node": "Parse Interaction", "type": "main", "index": 0}]]
+    },
+    "Parse Interaction": {
+      "main": [[{"node": "Add to Knowledge Graph", "type": "main", "index": 0}]]
+    },
+    "Add to Knowledge Graph": {
+      "main": [[{"node": "Log Result", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

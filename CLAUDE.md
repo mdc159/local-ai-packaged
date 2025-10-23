@@ -26,6 +26,7 @@ Private mode port mappings (localhost only) are shown in parentheses. In public 
 - **n8n**: Low-code workflow automation platform (5678) - primary orchestration tool for AI agents
 - **n8n-mcp**: n8n Model Context Protocol server (3002) - allows Claude Desktop to interact with n8n workflows
 - **Docling**: Advanced document parser (5001) - converts PDFs, DOCX, PPTX, XLSX, images to Markdown/JSON for RAG
+- **Graphiti**: Temporal knowledge graph service (5002) - builds episodic memory and entity relationships with Neo4j
 - **Ollama**: Local LLM runtime (11434) - runs models like qwen2.5:7b-instruct-q4_K_M
 - **Open WebUI**: ChatGPT-like interface (8080) - interacts with n8n agents via `n8n_pipe.py`
 - **Supabase**: Database, vector store, and auth (Kong API on port 8000)
@@ -129,6 +130,7 @@ Optional production Caddy config:
 When configuring credentials in n8n:
 - **Ollama**: `http://ollama:11434` (or `http://host.docker.internal:11434` if running Ollama natively on Mac)
 - **Docling**: `http://docling:5001` (API endpoint: `/v1/convert`)
+- **Graphiti**: `http://graphiti:5002` (API endpoints: `/v1/episodes`, `/v1/search`, `/v1/entities/search`)
 - **Postgres (Supabase)**: Host is `db` (not localhost), use credentials from `.env`
 - **Qdrant**: `http://qdrant:6333`
 - **Neo4j**: `bolt://neo4j:7687` or `http://neo4j:7474`
@@ -293,6 +295,84 @@ For detailed documentation, see:
 - [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md) - Step-by-step Claude Desktop setup guide
 - `n8n-mcp/README.md` - n8n-mcp server documentation
 - `n8n-mcp/CLAUDE_DESKTOP_CONFIG.md` - Additional configuration details
+
+### Graphiti Knowledge Graph Integration
+
+Graphiti provides temporal knowledge graph capabilities for building AI agents with episodic memory.
+
+**Access:**
+- API endpoint: <http://localhost:5002> (private mode)
+- Documentation: <http://localhost:5002/docs>
+- Health check: <http://localhost:5002/health>
+- Caddy (production): Port 8011 or custom hostname via `GRAPHITI_HOSTNAME`
+
+**Key Features:**
+- **Episodic Memory**: Track discrete interactions, conversations, or events as episodes
+- **Temporal Awareness**: Bi-temporal tracking (when facts were valid vs. when they were recorded)
+- **Entity Extraction**: Automatically extract entities and relationships from unstructured text
+- **Hybrid Search**: Semantic embeddings + BM25 + graph traversal (P95 latency ~300ms)
+- **Real-time Updates**: Incrementally processes data without batch recomputation
+
+**Using Graphiti in n8n workflows:**
+
+In HTTP Request nodes, use:
+- **Add Episode**: `POST http://graphiti:5002/v1/episodes`
+  ```json
+  {
+    "name": "Customer Meeting",
+    "content": "Met with John from Acme Corp. He needs reporting features.",
+    "source": "crm",
+    "reference_time": "2025-10-22T10:30:00Z"
+  }
+  ```
+
+- **Search Knowledge**: `POST http://graphiti:5002/v1/search`
+  ```json
+  {
+    "query": "What did John from Acme Corp need?",
+    "num_results": 5
+  }
+  ```
+
+- **Find Entities**: `POST http://graphiti:5002/v1/entities/search`
+  ```json
+  {
+    "entity_name": "John"
+  }
+  ```
+
+**Configuration:**
+
+Graphiti uses Neo4j for storage and requires an LLM for entity extraction:
+- **Default (Ollama)**: Uses local `qwen2.5:7b-instruct-q4_K_M` model, no API key needed
+- **OpenAI**: Set `GRAPHITI_LLM_PROVIDER=openai` and `OPENAI_API_KEY` in `.env`
+- **Anthropic**: Set `GRAPHITI_LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` in `.env`
+
+Graphiti automatically creates a `graphiti` database in Neo4j on first run.
+
+**Use Cases:**
+- **Agent Memory**: Build AI agents that remember past conversations and learn from interactions
+- **CRM Integration**: Track customer interactions over time with automatic relationship discovery
+- **Document Understanding**: Build temporal knowledge graphs from documents with entity linking
+- **Multi-source Intelligence**: Combine data from conversations, documents, and business systems
+
+**Example Workflows:**
+
+Three pre-built n8n workflows demonstrate Graphiti:
+- `Example_Graphiti_Memory_Agent.json` - Chat agent with episodic memory
+- `Example_Graphiti_CRM_Tracker.json` - Automatic CRM interaction tracking
+- `Example_Graphiti_Knowledge_Query.json` - Natural language knowledge base queries
+
+**Troubleshooting:**
+
+- Check container health: `docker ps | grep graphiti`
+- View logs: `docker logs graphiti --tail 50`
+- Test health: `curl http://localhost:5002/health`
+- Verify Neo4j connection: `docker exec neo4j cypher-shell -u neo4j -p your-password`
+
+For detailed documentation, see:
+- `graphiti-service/README.md` - Complete API documentation and examples
+- [Graphiti GitHub](https://github.com/getzep/graphiti) - Official documentation
 
 ## Troubleshooting Notes
 
