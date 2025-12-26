@@ -20,10 +20,10 @@
     reverse_proxy docling:5001
 }
 
-# # Graphiti Knowledge Graph (service not yet deployed)
-# {$GRAPHITI_HOSTNAME} {
-#     reverse_proxy graphiti:5002
-# }
+# Graphiti Knowledge Graph
+{$GRAPHITI_HOSTNAME} {
+    reverse_proxy graphiti:5002
+}
 
 # Open WebUI
 {$WEBUI_HOSTNAME} {

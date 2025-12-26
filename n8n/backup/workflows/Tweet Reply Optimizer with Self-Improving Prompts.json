@@ -1,0 +1,639 @@
+{
+  "name": "Tweet Reply Optimizer with Self-Improving Prompts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tweet-reply",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook: Receive Tweet URL",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        304
+      ],
+      "webhookId": "ba2a942c-b7da-454f-ad00-70f4b1f7741e"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.twitter.com/2/tweets/{{ $json.body.tweet_url.split('/status/')[1].split('?')[0] }}?expansions=attachments.media_keys,author_id&media.fields=url,preview_image_url&user.fields=username",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twitterOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.twitterOAuth2Api.accessToken }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "fetchTweet",
+      "name": "Fetch Tweet Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        464,
+        304
+      ],
+      "notes": "Fetches tweet data including text and media from Twitter API. Requires Twitter OAuth2 credentials.\n\nALTERNATIVE: Use a tweet scraper API like RapidAPI's Twitter scraper if you don't have Twitter API access."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, prompt_text, version\nFROM system_prompts\nWHERE prompt_type = 'vision_writer'\nAND is_active = true\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "getSystemPrompt",
+      "name": "Get Active System Prompt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        688,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract tweet data\nconst webhookData = $input.first().json.body;\nconst tweetData = $('Fetch Tweet Data').first().json.data;\nconst systemPromptData = $('Get Active System Prompt').first().json;\n\n// Parse tweet information\nconst tweetUrl = webhookData.tweet_url;\nconst tweetId = tweetUrl.split('/status/')[1].split('?')[0];\nconst engagementGoal = webhookData.engagement_goal || 'increase engagement';\n\n// Extract tweet content\nconst tweetText = tweetData.text || '';\nconst tweetAuthor = tweetData.includes?.users?.[0]?.username || 'unknown';\n\n// Extract image URLs if present\nconst imageUrls = [];\nif (tweetData.includes?.media) {\n  tweetData.includes.media.forEach(media => {\n    if (media.type === 'photo' && media.url) {\n      imageUrls.push(media.url);\n    } else if (media.preview_image_url) {\n      imageUrls.push(media.preview_image_url);\n    }\n  });\n}\n\n// Construct the full prompt for the Vision/Writing Agent\nconst systemPrompt = systemPromptData.prompt_text;\nconst userPrompt = `\n## TWEET TO ANALYZE:\n\n**Author:** @${tweetAuthor}\n**Tweet Text:** \"${tweetText}\"\n**Images:** ${imageUrls.length > 0 ? imageUrls.join(', ') : 'No images'}\n**Tweet URL:** ${tweetUrl}\n\n## ENGAGEMENT GOAL:\n${engagementGoal}\n\n## YOUR TASK:\nAnalyze this tweet (including any images) and generate an engaging reply that achieves the engagement goal. Follow the process outlined in your system prompt.\n`.trim();\n\n// Return structured data for next nodes\nreturn [{\n  json: {\n    // Tweet data\n    tweet_url: tweetUrl,\n    tweet_id: tweetId,\n    tweet_text: tweetText,\n    tweet_author: tweetAuthor,\n    tweet_image_urls: imageUrls,\n    \n    // Prompts\n    system_prompt: systemPrompt,\n    user_prompt: userPrompt,\n    engagement_goal: engagementGoal,\n    \n    // Metadata for tracking\n    prompt_version_id: systemPromptData.id,\n    prompt_version_number: systemPromptData.version,\n    \n    // Timestamp\n    requested_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "constructPrompt",
+      "name": "Construct Vision Agent Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/your-repo"
+            },
+            {
+              "name": "X-Title",
+              "value": "Tweet Reply Optimizer"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-3.5-sonnet:beta\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ $json.system_prompt | toJsonString }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": {{ $json.user_prompt | toJsonString }}\n        }{% if $json.tweet_image_urls.length > 0 %},\n        {% for image_url in $json.tweet_image_urls %}\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": {{ image_url | toJsonString }}\n          }\n        }{% if not loop.last %},{% endif %}\n        {% endfor %}\n        {% endif %}\n      ]\n    }\n  ],\n  \"max_tokens\": 2000,\n  \"temperature\": 0.7\n}",
+        "options": {}
+      },
+      "id": "visionAgent",
+      "name": "Vision/Writing Agent (OpenRouter)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        304
+      ],
+      "notes": "Calls vision-capable LLM via OpenRouter API.\n\nSupported providers:\n- OpenRouter: https://openrouter.ai\n- Featherless: https://featherless.ai\n\nChange the URL and model as needed.\n\nRecommended models:\n- anthropic/claude-3.5-sonnet (best quality)\n- openai/gpt-4o (good alternative)\n- google/gemini-pro-vision (cost-effective)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the generated reply from LLM response\nconst llmResponse = $input.first().json;\nconst generatedText = llmResponse.choices[0].message.content;\n\n// Parse the structured response\n// The LLM should return: TWEET ANALYSIS, ENGAGEMENT STRATEGY, GENERATED REPLY\nconst replyMatch = generatedText.match(/\\*\\*GENERATED REPLY:\\*\\*\\s*([\\s\\S]+?)(?=\\n\\n|$)/i);\nconst analysisMatch = generatedText.match(/\\*\\*TWEET ANALYSIS:\\*\\*\\s*([\\s\\S]+?)(?=\\n\\n|\\*\\*)/i);\nconst strategyMatch = generatedText.match(/\\*\\*ENGAGEMENT STRATEGY:\\*\\*\\s*([\\s\\S]+?)(?=\\n\\n|\\*\\*)/i);\n\nconst generatedReply = replyMatch ? replyMatch[1].trim() : generatedText.trim();\nconst tweetAnalysis = analysisMatch ? analysisMatch[1].trim() : 'Analysis not provided';\nconst engagementStrategy = strategyMatch ? strategyMatch[1].trim() : 'Strategy not provided';\n\n// Get input data\nconst inputData = $('Construct Vision Agent Prompt').first().json;\n\n// Return all data needed for user review\nreturn [{\n  json: {\n    ...inputData,\n    \n    // LLM output\n    generated_reply: generatedReply,\n    tweet_analysis: tweetAnalysis,\n    engagement_strategy: engagementStrategy,\n    full_llm_response: generatedText,\n    \n    // Model metadata\n    model_used: llmResponse.model,\n    tokens_used: llmResponse.usage?.total_tokens || 0,\n    generation_time_ms: Date.now() - new Date(inputData.requested_at).getTime()\n  }\n}];"
+      },
+      "id": "parseVisionResponse",
+      "name": "Parse Vision Agent Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Review AI-Generated Tweet Reply",
+        "formDescription": "=Review the generated reply and provide feedback to improve the AI system.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Original Tweet",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Tweet URL"
+            },
+            {
+              "fieldLabel": "Tweet Analysis",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Engagement Strategy",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Generated Reply",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "approved"
+                  },
+                  {
+                    "option": "revise"
+                  },
+                  {
+                    "option": "reject"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Your Feedback / Critique",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Rating (1-5)",
+              "fieldType": "number",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "userReview",
+      "name": "Wait: User Review Form",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        304
+      ],
+      "webhookId": "f377cba1-07ea-4cb0-947b-4208cbe01513"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.data.decision }}",
+                    "rightValue": "approved",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "approved"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.data.decision }}",
+                    "rightValue": "revise",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "revise"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.data.decision }}",
+                    "rightValue": "reject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reject"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "routeDecision",
+      "name": "Route by Decision",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1792,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all necessary context for the Prompt Optimizer Agent\nconst visionData = $('Parse Vision Agent Response').first().json;\nconst formData = $input.first().json.data;\n\n// Construct the optimization prompt\nconst optimizationPrompt = `\n## CONTEXT FOR SYSTEM PROMPT OPTIMIZATION\n\nYou are analyzing a case where an AI-generated tweet reply received user feedback. Your task is to improve the system prompt based on this feedback.\n\n---\n\n### CURRENT SYSTEM PROMPT (Version ${visionData.prompt_version_number}):\n${visionData.system_prompt}\n\n---\n\n### ORIGINAL TWEET ANALYSIS:\nThe Vision/Writing Agent analyzed the tweet as follows:\n${visionData.tweet_analysis}\n\n**Tweet Text:** \"${visionData.tweet_text}\"\n**Tweet Author:** @${visionData.tweet_author}\n**Images:** ${visionData.tweet_image_urls.length > 0 ? visionData.tweet_image_urls.join(', ') : 'None'}\n\n---\n\n### ENGAGEMENT GOAL:\n${visionData.engagement_goal}\n\n---\n\n### GENERATED REPLY:\n${visionData.generated_reply}\n\n---\n\n### USER FEEDBACK:\n**Decision:** ${formData.decision}\n**Rating:** ${formData['rating (1-5)']} out of 5\n**Critique:** ${formData['your feedback / critique'] || 'No specific feedback provided'}\n\n---\n\n## YOUR TASK:\n\nAnalyze why the generated reply didn't fully meet the user's expectations (rating: ${formData['rating (1-5)']}/5) and propose specific improvements to the system prompt.\n\nFollow the analysis process outlined in your system prompt to generate:\n1. Issue identification\n2. Root cause analysis\n3. Proposed changes\n4. Updated system prompt\n5. Rationale\n6. Testing criteria\n`.trim();\n\nreturn [{\n  json: {\n    // Original data\n    ...visionData,\n    \n    // User feedback\n    user_decision: formData.decision,\n    user_feedback: formData['your feedback / critique'] || '',\n    user_rating: parseInt(formData['rating (1-5)']),\n    reviewed_at: new Date().toISOString(),\n    \n    // Optimization context\n    optimization_prompt: optimizationPrompt\n  }\n}];"
+      },
+      "id": "prepareOptimization",
+      "name": "Prepare Optimization Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        464
+      ],
+      "notes": "Runs when decision is 'revise' or 'reject' to prepare context for the Prompt Optimizer Agent"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, prompt_text, version\nFROM system_prompts\nWHERE prompt_type = 'prompt_optimizer'\nAND is_active = true\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "getOptimizerPrompt",
+      "name": "Get Optimizer System Prompt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2224,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "HTTP-Referer",
+              "value": "https://github.com/your-repo"
+            },
+            {
+              "name": "X-Title",
+              "value": "Tweet Reply Optimizer"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-3.5-sonnet:beta\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ $('Get Optimizer System Prompt').first().json.prompt_text | toJsonString }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ $('Prepare Optimization Context').first().json.optimization_prompt | toJsonString }}\n    }\n  ],\n  \"max_tokens\": 4000,\n  \"temperature\": 0.7\n}",
+        "options": {}
+      },
+      "id": "optimizerAgent",
+      "name": "Prompt Optimizer Agent (OpenRouter)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2448,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the updated system prompt from optimizer response\nconst optimizerResponse = $input.first().json;\nconst optimizerOutput = optimizerResponse.choices[0].message.content;\n\n// Parse the UPDATED SYSTEM PROMPT section\nconst updatedPromptMatch = optimizerOutput.match(/\\*\\*UPDATED SYSTEM PROMPT:\\*\\*\\s*([\\s\\S]+?)(?=\\n\\n\\*\\*RATIONALE:|$)/i);\nconst rationaleMatch = optimizerOutput.match(/\\*\\*RATIONALE:\\*\\*\\s*([\\s\\S]+?)(?=\\n\\n\\*\\*|$)/i);\nconst proposedChangesMatch = optimizerOutput.match(/\\*\\*PROPOSED CHANGES:\\*\\*\\s*([\\s\\S]+?)(?=\\n\\n\\*\\*|$)/i);\n\nconst updatedPromptText = updatedPromptMatch ? updatedPromptMatch[1].trim() : null;\nconst rationale = rationaleMatch ? rationaleMatch[1].trim() : 'Not provided';\nconst proposedChanges = proposedChangesMatch ? proposedChangesMatch[1].trim() : 'Not provided';\n\nif (!updatedPromptText) {\n  throw new Error('Failed to parse updated system prompt from optimizer response');\n}\n\n// Get context data\nconst contextData = $('Prepare Optimization Context').first().json;\n\nreturn [{\n  json: {\n    ...contextData,\n    \n    // New prompt data\n    new_prompt_text: updatedPromptText,\n    optimization_rationale: rationale,\n    proposed_changes: proposedChanges,\n    full_optimizer_response: optimizerOutput,\n    \n    // Metadata\n    new_version_number: contextData.prompt_version_number + 1,\n    optimizer_model: optimizerResponse.model,\n    optimized_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "parseOptimizerResponse",
+      "name": "Parse Optimizer Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- First, deactivate old prompts\nSELECT deactivate_old_prompts('vision_writer');\n\n-- Insert new prompt version\nINSERT INTO system_prompts (\n  prompt_text,\n  prompt_type,\n  version,\n  is_active,\n  created_by,\n  model_used,\n  notes,\n  parent_version\n) VALUES (\n  {{ $json.new_prompt_text | toJsonString }},\n  'vision_writer',\n  {{ $json.new_version_number }},\n  true,\n  'prompt_optimizer_agent',\n  {{ $json.optimizer_model | toJsonString }},\n  {{ $json.optimization_rationale | toJsonString }},\n  {{ $json.prompt_version_id }}\n)\nRETURNING id, version;",
+        "options": {}
+      },
+      "id": "saveNewPrompt",
+      "name": "Save New Prompt Version",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2880,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare final data for logging\nconst inputData = $input.first().json;\n\n// Check if we're coming from approved path or optimization path\nconst fromOptimization = inputData.new_prompt_text !== undefined;\n\nif (fromOptimization) {\n  // Get the new prompt ID from the save operation\n  const saveResult = $('Save New Prompt Version').first().json;\n  \n  return [{\n    json: {\n      ...inputData,\n      new_prompt_created: true,\n      new_prompt_id: saveResult.id\n    }\n  }];\n} else {\n  // Approved path - no optimization\n  return [{\n    json: {\n      ...inputData,\n      new_prompt_created: false,\n      new_prompt_id: null\n    }\n  }];\n}"
+      },
+      "id": "prepareFinalLog",
+      "name": "Prepare Final Log Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tweet_interactions",
+          "mode": "list",
+          "cachedResultName": "tweet_interactions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "tweet_url": "={{ $json.tweet_url }}",
+            "tweet_id": "={{ $json.tweet_id }}",
+            "tweet_text": "={{ $json.tweet_text }}",
+            "tweet_author": "={{ $json.tweet_author }}",
+            "tweet_image_urls": "={{ $json.tweet_image_urls }}",
+            "engagement_goal": "={{ $json.engagement_goal }}",
+            "requested_at": "={{ $json.requested_at }}",
+            "generated_reply": "={{ $json.generated_reply }}",
+            "prompt_version_used": "={{ $json.prompt_version_id }}",
+            "model_used": "={{ $json.model_used }}",
+            "generation_time_ms": "={{ $json.generation_time_ms }}",
+            "user_decision": "={{ $json.user_decision }}",
+            "user_feedback": "={{ $json.user_feedback }}",
+            "user_rating": "={{ $json.user_rating }}",
+            "reviewed_at": "={{ $json.reviewed_at }}",
+            "new_prompt_created": "={{ $json.new_prompt_created || false }}",
+            "new_prompt_version": "={{ $json.new_prompt_id || null }}",
+            "optimization_notes": "={{ $json.proposed_changes || null }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "logInteraction",
+      "name": "Log Interaction to Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2224,
+        144
+      ],
+      "notes": "Logs all interaction data including tweet, reply, feedback, and optimization results"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"tweet_id\": {{ $json.tweet_id | toJsonString }},\n  \"generated_reply\": {{ $json.generated_reply | toJsonString }},\n  \"user_decision\": {{ $json.user_decision | toJsonString }},\n  \"user_rating\": {{ $json.user_rating }},\n  \"new_prompt_created\": {{ $json.new_prompt_created }},\n  \"new_prompt_version\": {{ $json.new_prompt_id || null }},\n  \"message\": \"Tweet reply interaction logged successfully\"\n}",
+        "options": {}
+      },
+      "id": "webhookResponse",
+      "name": "Send Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2448,
+        144
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Receive Tweet URL": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tweet Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tweet Data": {
+      "main": [
+        [
+          {
+            "node": "Get Active System Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active System Prompt": {
+      "main": [
+        [
+          {
+            "node": "Construct Vision Agent Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construct Vision Agent Prompt": {
+      "main": [
+        [
+          {
+            "node": "Vision/Writing Agent (OpenRouter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vision/Writing Agent (OpenRouter)": {
+      "main": [
+        [
+          {
+            "node": "Parse Vision Agent Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Vision Agent Response": {
+      "main": [
+        [
+          {
+            "node": "Wait: User Review Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait: User Review Form": {
+      "main": [
+        [
+          {
+            "node": "Route by Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Decision": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Log Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Optimization Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Optimization Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Optimization Context": {
+      "main": [
+        [
+          {
+            "node": "Get Optimizer System Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Optimizer System Prompt": {
+      "main": [
+        [
+          {
+            "node": "Prompt Optimizer Agent (OpenRouter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt Optimizer Agent (OpenRouter)": {
+      "main": [
+        [
+          {
+            "node": "Parse Optimizer Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Optimizer Response": {
+      "main": [
+        [
+          {
+            "node": "Save New Prompt Version",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save New Prompt Version": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Log Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Log Data": {
+      "main": [
+        [
+          {
+            "node": "Log Interaction to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Interaction to Database": {
+      "main": [
+        [
+          {
+            "node": "Send Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": null,
+  "meta": {
+    "instanceId": "54ba4ff748352f5330a1498d89f26a9c091bfb0a97c7cbba8b3518ee45f355f9"
+  },
+  "id": "LOGZIsL7b0Q5oih4",
+  "tags": []
+}

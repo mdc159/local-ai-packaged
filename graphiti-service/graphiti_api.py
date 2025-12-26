@@ -19,7 +19,6 @@ from pydantic import BaseModel, Field
 from graphiti_core import Graphiti
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.edges import EntityEdge
-from graphiti_core.search import SearchConfig
 
 
 # Configure logging
@@ -122,18 +121,17 @@ async def lifespan(app: FastAPI):
     try:
         logger.info(f"Initializing Graphiti with Neo4j at {NEO4J_URI}")
 
-        # Import Neo4j driver
-        from graphiti_core.llm_client import LLMConfig, LLMClient
-        from graphiti_core.embedder import EmbedderConfig, EmbedderClient
+        from graphiti_core.llm_client import OpenAIClient, LLMConfig
 
-        # Configure LLM
+        # Configure LLM - OpenAIClient works with Ollama's OpenAI-compatible API
         if LLM_PROVIDER == "ollama":
             llm_config = LLMConfig(
-                api_base=LLM_BASE_URL,
+                base_url=LLM_BASE_URL,
                 model=LLM_MODEL,
                 api_key="ollama"  # Dummy key for Ollama
             )
         elif LLM_PROVIDER == "anthropic":
+            # Anthropic requires using OpenAI-compatible mode or separate client
             llm_config = LLMConfig(
                 api_key=ANTHROPIC_API_KEY,
                 model=LLM_MODEL
@@ -142,35 +140,21 @@ async def lifespan(app: FastAPI):
             llm_config = LLMConfig(
                 api_key=OPENAI_API_KEY,
                 model=LLM_MODEL,
-                api_base=LLM_BASE_URL if LLM_BASE_URL else None
+                base_url=LLM_BASE_URL if LLM_BASE_URL else None
             )
 
-        llm_client = LLMClient(llm_config)
-
-        # Configure embedder (use OpenAI embeddings or Ollama)
-        if LLM_PROVIDER == "ollama":
-            embedder_config = EmbedderConfig(
-                api_base=LLM_BASE_URL,
-                model="nomic-embed-text",
-                api_key="ollama"
-            )
-        else:
-            embedder_config = EmbedderConfig(
-                api_key=OPENAI_API_KEY,
-                model="text-embedding-3-small"
-            )
-
-        embedder_client = EmbedderClient(embedder_config)
+        llm_client = OpenAIClient(config=llm_config)
 
         # Initialize Graphiti
         graphiti_instance = Graphiti(
             uri=NEO4J_URI,
             user=NEO4J_USER,
             password=NEO4J_PASSWORD,
-            database=NEO4J_DATABASE,
-            llm_client=llm_client,
-            embedder=embedder_client
+            llm_client=llm_client
         )
+
+        # Build indices
+        await graphiti_instance.build_indices_and_constraints()
 
         logger.info("Graphiti initialized successfully")
 
@@ -263,16 +247,11 @@ async def search(request: SearchRequest):
         raise HTTPException(status_code=503, detail="Graphiti not initialized")
 
     try:
-        # Configure search
-        search_config = SearchConfig(
-            num_results=request.num_results,
-            center_node_uuid=request.center_node_uuid
-        )
-
         # Perform search
         results = await graphiti_instance.search(
             query=request.query,
-            config=search_config
+            num_results=request.num_results,
+            center_node_uuid=request.center_node_uuid
         )
 
         # Format results

@@ -46,6 +46,10 @@ privately interact with your local models and N8N agents
 ✅ [**Flowise**](https://flowiseai.com/) - No/low code AI agent
 builder that pairs very well with n8n
 
+✅ [**Docling**](https://github.com/DS4SD/docling) - Advanced document parser that converts PDFs, DOCX, PPTX, XLSX, and images to Markdown/JSON for superior RAG workflows
+
+✅ [**Graphiti**](https://github.com/getzep/graphiti) - Temporal knowledge graph service for building AI agents with episodic memory and entity relationship tracking
+
 ✅ [**Qdrant**](https://qdrant.tech/) - Open source, high performance vector
 store with an comprehensive API. Even though you can use Supabase for RAG, this was
 kept unlike Postgres since it's faster than Supabase so sometimes is the better option.
@@ -135,10 +139,13 @@ Before running the services, you need to set up your environment variables for S
    WEBUI_HOSTNAME=openwebui.yourdomain.com
    FLOWISE_HOSTNAME=flowise.yourdomain.com
    SUPABASE_HOSTNAME=supabase.yourdomain.com
+   LANGFUSE_HOSTNAME=langfuse.yourdomain.com
    N8N_MCP_HOSTNAME=n8n-mcp.yourdomain.com
+   DOCLING_HOSTNAME=docling.yourdomain.com
+   GRAPHITI_HOSTNAME=graphiti.yourdomain.com
+   NEO4J_HOSTNAME=neo4j.yourdomain.com
    OLLAMA_HOSTNAME=ollama.yourdomain.com
    SEARXNG_HOSTNAME=searxng.yourdomain.com
-   NEO4J_HOSTNAME=neo4j.yourdomain.com
    LETSENCRYPT_EMAIL=your-email-address
    ```
 
@@ -149,8 +156,10 @@ The project includes a `start_services.py` script that handles starting both the
 **Key features of the startup script:**
 
 - **Automatic retry logic**: Retries up to 3 times if health checks fail during startup
-- **Sequential startup**: Starts Supabase first, waits 20 seconds, then starts AI services
-- **Health check grace periods**: Configured to allow services adequate time to initialize
+- **Sequential startup**: Starts Supabase first, actively polls for health (max 180s), then starts AI services
+- **Active health monitoring**: Polls Supabase Kong API gateway every 10 seconds instead of fixed wait time
+- **Health check grace periods**: Configured to allow services adequate time to initialize (postgres: 30s, redis: 15s, clickhouse: 60s)
+- **WSL2 compatibility**: Port bindings use `0.0.0.0` instead of `127.0.0.1` to avoid WSL2 Docker Desktop port forwarding bug
 - **Error handling**: Provides clear error messages and troubleshooting guidance if startup fails
 
 ### For Nvidia GPU users
@@ -343,6 +352,8 @@ For detailed setup instructions, see [N8N_MCP_INTEGRATION.md](N8N_MCP_INTEGRATIO
 To open n8n at any time, visit <http://localhost:5678/> in your browser.
 To open Open WebUI at any time, visit <http://localhost:8080/>.
 To check n8n-mcp health, visit <http://localhost:3002/health>.
+To access Docling API documentation, visit <http://localhost:5001/docs>.
+To check Graphiti health, visit <http://localhost:5002/health>.
 
 With your n8n instance, you’ll have access to over 400 integrations and a
 suite of basic and advanced AI nodes such as
@@ -365,12 +376,15 @@ To update all containers to their latest versions (n8n, n8n-mcp, Open WebUI, etc
 ```bash
 # Stop all services
 docker compose -p localai -f docker-compose.yml --profile <your-profile> down
+docker compose -p localai -f docker-compose.yml --profile gpu-nvidia down
 
 # Pull latest versions of all containers (including n8n-mcp)
 docker compose -p localai -f docker-compose.yml --profile <your-profile> pull
+docker compose -p localai -f docker-compose.yml --profile gpu-nvidia pull
 
 # Start services again with your desired profile
 python start_services.py --profile <your-profile>
+python start_services.py --profile gpu-nvidia --environment private
 ```
 
 Replace `<your-profile>` with one of: `cpu`, `gpu-nvidia`, `gpu-amd`, or `none`.
@@ -379,7 +393,7 @@ Replace `<your-profile>` with one of: `cpu`, `gpu-nvidia`, `gpu-amd`, or `none`.
 
 **Containers that will be updated:**
 
-- n8n, n8n-mcp, Ollama, Open WebUI, Flowise, Qdrant, Neo4j, Langfuse, SearXNG, Caddy, and all Supabase services
+- n8n, n8n-mcp, Ollama, Open WebUI, Flowise, Docling, Graphiti, Qdrant, Neo4j, Langfuse, SearXNG, Caddy, and all Supabase services
 
 ## Troubleshooting
 
@@ -392,7 +406,9 @@ Here are solutions to common issues you might encounter:
   2. View Clickhouse logs: `docker logs localai-clickhouse-1 --tail 50`
   3. Check all service statuses: `docker compose -p localai ps`
 
-  **Technical details**: Clickhouse now has a 30-second startup grace period before health checks are considered failures, which should prevent this issue in normal circumstances.
+  **Technical details**: Health check `start_period` grace periods have been configured to prevent premature failures: postgres (30s), redis (15s), and clickhouse (60s).
+
+- **WSL2 Port Forwarding Errors (Windows)**: If you encounter errors like `ports are not available: exposing port TCP 127.0.0.1:XXXX -> 127.0.0.1:0: /forwards/expose returned unexpected status: 500`, this is a known WSL2/Docker Desktop bug. The project now uses `0.0.0.0` port bindings instead of `127.0.0.1` in private mode to work around this issue. Windows Firewall provides security by blocking external access by default.
 
 - **Redis Authentication Warnings**: If you see "ERR AUTH password called without any password configured" in Langfuse logs, this has been fixed in the current version. The Redis/Valkey container runs without authentication, and Langfuse is now configured to connect without credentials. If you upgraded from an older version, restart the Langfuse containers to apply the fix:
 

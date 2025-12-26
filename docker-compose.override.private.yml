@@ -1,74 +1,88 @@
+# docker-compose.override.private.yml
+# Port binding strategy for private/development mode
+#
+# NOTE: We bind to 0.0.0.0 (all interfaces) instead of 127.0.0.1 to avoid
+# the WSL2 port forwarding bug that causes random "500 Internal Server Error"
+# when Docker Desktop tries to expose ports via /forwards/expose.
+#
+# Security is maintained by Windows Firewall which blocks external access by default.
+# For additional security on shared networks, configure Windows Firewall rules.
+
 services:
   flowise:
     ports:
-      - 127.0.0.1:3001:3001
+      - "3001:3001"
 
   open-webui:
     ports:
-      - 127.0.0.1:8080:8080
+      - "8080:8080"
 
   n8n:
     ports:
-      - 127.0.0.1:5678:5678
+      - "5678:5678"
 
   n8n-mcp:
     ports:
-      - 127.0.0.1:3002:3000
+      - "3002:3000"
 
   docling:
     ports:
-      - 127.0.0.1:5001:5001
+      - "5001:5001"
 
   qdrant:
     ports:
-      - 127.0.0.1:6333:6333
-      - 127.0.0.1:6334:6334
+      - "6333:6333"
+      - "6334:6334"
 
   neo4j:
     ports:
-      - 127.0.0.1:7473:7473
-      - 127.0.0.1:7474:7474
-      - 127.0.0.1:7687:7687
+      - "7473:7473"
+      - "7474:7474"
+      - "7687:7687"
+
+  graphiti:
+    ports:
+      - "5002:5002"
 
   langfuse-worker:
     ports:
-      - 127.0.0.1:3030:3030
+      - "3030:3030"
 
   langfuse-web:
     ports:
-      - 127.0.0.1:3000:3000
+      - "3000:3000"
 
   clickhouse:
     ports:
-      - 127.0.0.1:8123:8123
-      - 127.0.0.1:9000:9000
-      - 127.0.0.1:9009:9009
+      - "8123:8123"
+      - "9000:9000"
+      - "9009:9009"
 
   minio:
     ports:
-      - 127.0.0.1:9010:9000
-      - 127.0.0.1:9011:9001
+      - "9010:9000"
+      - "9011:9001"
 
   postgres:
     ports:
-      - 127.0.0.1:5433:5432                
+      - "5433:5432"
 
   redis:
     ports:
-      - 127.0.0.1:6379:6379
+      - "6379:6379"
 
   searxng:
     ports:
-      - 127.0.0.1:8081:8080
+      - "8081:8080"
 
   ollama-cpu:
     ports:
-      - 127.0.0.1:11434:11434
+      - "11434:11434"
 
   ollama-gpu:
     ports:
-      - 127.0.0.1:11434:11434
-      
+      - "11434:11434"
+
   ollama-gpu-amd:
     ports:
-      - 127.0.0.1:11434:11434
+      - "11434:11434"

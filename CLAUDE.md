@@ -52,7 +52,9 @@ The project supports GPU acceleration via Docker Compose profiles:
 Two deployment modes controlled by `start_services.py --environment`:
 
 - `private` (default): All service ports exposed on localhost for development
-  - Uses `docker-compose.override.private.yml` to map all ports to 127.0.0.1
+  - Uses `docker-compose.override.private.yml` to map all ports to `0.0.0.0` (binds to all interfaces)
+  - **WSL2 Compatibility**: Ports are bound to `0.0.0.0` instead of `127.0.0.1` to avoid WSL2 port forwarding bug that causes "500 Internal Server Error"
+  - Security is maintained by Windows Firewall which blocks external access by default
   - Direct access to all services without going through Caddy
   - Best for local development and debugging
 - `public`: Only ports 80/443 exposed, Caddy handles routing with HTTPS
@@ -61,6 +63,12 @@ Two deployment modes controlled by `start_services.py --environment`:
   - Required for production deployments with custom domains
 
 ## Common Commands
+
+### Platform Notes
+
+- **Windows**: Use PowerShell for all commands and scripts
+- **Linux/macOS**: The `start_services.py` script works cross-platform
+- **WSL2**: Recommended for Windows GPU support with Docker Desktop
 
 ### Starting Services
 
@@ -78,8 +86,8 @@ The startup script:
 3. Generates SearXNG secret key
 4. Stops existing containers
 5. Starts Supabase stack
-6. Waits 10 seconds
-7. Starts AI services stack
+6. **Actively polls Supabase health** (max 180s, checking every 10s via Kong API gateway)
+7. Starts AI services stack with **automatic retry logic** (up to 3 attempts with 15s delays)
 
 ### Stopping Services
 
@@ -122,7 +130,7 @@ Required secrets in `.env` (see `.env.example`):
 - **Langfuse**: `CLICKHOUSE_PASSWORD`, `MINIO_ROOT_PASSWORD`, `LANGFUSE_SALT`, `NEXTAUTH_SECRET`, `ENCRYPTION_KEY`
 
 Optional production Caddy config:
-- `N8N_HOSTNAME`, `WEBUI_HOSTNAME`, `FLOWISE_HOSTNAME`, `SUPABASE_HOSTNAME`, `LANGFUSE_HOSTNAME`, `N8N_MCP_HOSTNAME`, `NEO4J_HOSTNAME`
+- `N8N_HOSTNAME`, `WEBUI_HOSTNAME`, `FLOWISE_HOSTNAME`, `SUPABASE_HOSTNAME`, `LANGFUSE_HOSTNAME`, `N8N_MCP_HOSTNAME`, `NEO4J_HOSTNAME`, `DOCLING_HOSTNAME`, `GRAPHITI_HOSTNAME`
 - `LETSENCRYPT_EMAIL`
 
 ### Service Connections
@@ -176,6 +184,8 @@ The `./shared` directory is mounted to `/data/shared` inside the n8n container f
 ### Supabase Repository Management
 
 The Supabase repo is cloned using sparse checkout to only get the `docker/` directory, reducing download size. The `start_services.py` script handles this automatically.
+
+**Note:** The Supabase directory may appear as a modified submodule in git status (`m supabase`). This is expected as the `start_services.py` script manages it independently from git.
 
 ### SearXNG Secret Key
 
@@ -287,9 +297,9 @@ For local files in the `./shared` folder, first upload the file to a temporary w
 
 **Troubleshooting:**
 
-- Check container health: `docker ps | grep n8n-mcp`
-- View logs: `docker logs n8n-mcp --tail 50`
-- Test health: `curl http://localhost:3002/health`
+- Check container health: `docker ps | grep docling`
+- View logs: `docker logs docling --tail 50`
+- Test health: `curl http://localhost:5001/health`
 
 For detailed documentation, see:
 - [CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md) - Step-by-step Claude Desktop setup guide
@@ -365,10 +375,13 @@ Three pre-built n8n workflows demonstrate Graphiti:
 
 **Troubleshooting:**
 
+- **Startup Time**: Graphiti takes ~80 seconds to initialize on first run as it builds Neo4j indices and constraints
+- **API Version**: The service uses graphiti-core v0.3.5 with `OpenAIClient` which works with Ollama's OpenAI-compatible API
 - Check container health: `docker ps | grep graphiti`
 - View logs: `docker logs graphiti --tail 50`
-- Test health: `curl http://localhost:5002/health`
-- Verify Neo4j connection: `docker exec neo4j cypher-shell -u neo4j -p your-password`
+- Test health: `curl http://localhost:5002/health` (should return `{"status":"ok","neo4j_connected":true,"llm_provider":"ollama","database":"graphiti"}`)
+- Verify Neo4j connection: `docker exec localai-neo4j-1 cypher-shell -u neo4j -p your-password`
+- If you see import errors like `ModuleNotFoundError: No module named 'graphiti_core.embedder'`, the API code has been updated to work with the current graphiti-core library version
 
 For detailed documentation, see:
 - `graphiti-service/README.md` - Complete API documentation and examples
@@ -376,7 +389,18 @@ For detailed documentation, see:
 
 ## Troubleshooting Notes
 
-- **Docker Compose Startup Failures**: If you see "dependency failed to start: 500 Internal Server Error" during startup, this is usually a transient health check failure (typically from Clickhouse during initialization). The `start_services.py` script includes automatic retry logic (up to 3 attempts with 15-second delays) to handle this. If it persists after 3 attempts, check individual service logs with `docker compose -p localai logs <service-name>`.
+### Startup Issues
+
+- **Docker Compose Startup Failures**: If you see "dependency failed to start: 500 Internal Server Error" during startup, this is usually a transient health check failure (typically from Clickhouse during initialization). The `start_services.py` script includes automatic retry logic (up to 3 attempts with 15-second delays) to handle this. Health check `start_period` grace periods have been added to postgres (30s), redis (15s), and clickhouse (60s) to prevent premature health check failures during cold starts.
+
+- **WSL2 Port Forwarding Bug (Windows)**: If you encounter `ports are not available: exposing port TCP 127.0.0.1:XXXX -> 127.0.0.1:0: /forwards/expose returned unexpected status: 500`, this is a known WSL2/Docker Desktop bug. The `docker-compose.override.private.yml` file now binds ports to `0.0.0.0` instead of `127.0.0.1` to work around this issue. Windows Firewall provides security by blocking external access by default.
+
+- **Supabase Wait Time**: The startup script now uses active health polling (max 180s, checking every 10s) instead of a fixed 20-second sleep. Supabase services typically take 50-100+ seconds to fully initialize on first run.
+
+- **n8n Workflow Import Issues**: If you see UNIQUE constraint violations during n8n-import, all workflow files have been cleaned to set `versionId: null` and the import command now processes workflows individually, skipping any that already exist. This ensures idempotent imports on restarts.
+
+### Service-Specific Issues
+
 - **Supabase Pooler Restarting**: See GitHub issue #30210 in supabase/supabase repo
 - **Supabase Analytics Startup Failure**: Delete `supabase/docker/volumes/db/data` folder after changing Postgres password
 - **Docker Desktop**: Enable "Expose daemon on tcp://localhost:2375 without TLS" in settings
@@ -414,6 +438,8 @@ docker compose -p localai restart n8n
 
 - n8n: <http://localhost:5678/healthz>
 - n8n-mcp: <http://localhost:3002/health>
+- Docling: <http://localhost:5001/health>
+- Graphiti: <http://localhost:5002/health>
 - Ollama: <http://localhost:11434/api/tags>
 - Qdrant: <http://localhost:6333/dashboard>
 - Neo4j: <http://localhost:7474>
@@ -464,6 +490,51 @@ docker compose -p localai -f supabase/docker/docker-compose.yml down -v
 - `Caddyfile`: Reverse proxy configuration
 - `n8n/backup/`: Workflows and credentials for auto-import
 - `n8n-mcp/`: n8n MCP server standalone configuration and documentation
+- `docling-service/`: Docling document parser service and API
+- `graphiti-service/`: Graphiti knowledge graph service and API
 - `flowise/`: Pre-built Flowise custom tools
 - `n8n-tool-workflows/`: N8N workflows used as tools by Flowise agents
 - `searxng/settings-base.yml`: Base SearXNG configuration
+
+## Backup and Restoration
+
+The project includes automated scripts for backing up and restoring your entire setup:
+
+- **Backup Script**: `backup_docker_volumes.ps1` - Backs up all Docker volumes and critical data
+- **Restore Script**: `restore_docker_volumes.ps1` - Restores from backup after reimaging
+
+See detailed guides:
+- `BACKUP_GUIDE.md` - Complete backup procedures and manual commands
+- `RESTORATION_GUIDE.md` - Step-by-step restoration after reimaging
+
+### Critical Data to Backup
+
+The backup script automatically handles:
+- Docker volumes: n8n_storage, open-webui, qdrant_storage, db-config, langfuse_*
+- Project directories: supabase/docker/volumes, neo4j/data, shared/
+- Configuration: .env, docker-compose files, Caddyfile
+- User data: ~/.flowise directory
+
+### Quick Backup
+
+**Windows (PowerShell):**
+```powershell
+.\backup_docker_volumes.ps1
+```
+
+Backups are saved to `J:\My Backups\local-ai-backup_<timestamp>\` by default.
+
+### Quick Restore
+
+**Windows (PowerShell):**
+```powershell
+.\restore_docker_volumes.ps1 -BackupLocation "J:\My Backups\local-ai-backup_<timestamp>"
+```
+
+The restore script will:
+- Validate backup integrity
+- Show backup manifest
+- Prompt for confirmation
+- Restore all Docker volumes
+- Restore project files
+- Restore Flowise directory

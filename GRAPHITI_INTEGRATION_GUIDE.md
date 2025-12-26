@@ -380,15 +380,26 @@ results = await graphiti.search("How do these systems integrate?")
 
 ### Graphiti Won't Start
 
+**Startup Time:**
+Graphiti takes approximately 80 seconds to fully initialize on first run. This is normal as it:
+- Connects to Neo4j
+- Builds indices and constraints
+- Initializes the LLM client (Ollama by default)
+
+Wait for the health check to pass before making API calls.
+
+**API Compatibility:**
+The service uses graphiti-core v0.3.5 with `OpenAIClient` which works with Ollama's OpenAI-compatible API. If you see import errors like `ModuleNotFoundError: No module named 'graphiti_core.embedder'`, the API code has been updated to work with the current library version.
+
 **Check Neo4j is running:**
 ```bash
 docker ps | grep neo4j
-docker logs neo4j --tail 50
+docker logs localai-neo4j-1 --tail 50
 ```
 
 **Test Neo4j connection:**
 ```bash
-docker exec neo4j cypher-shell -u neo4j -p your-password
+docker exec localai-neo4j-1 cypher-shell -u neo4j -p your-password
 ```
 
 ### LLM Errors

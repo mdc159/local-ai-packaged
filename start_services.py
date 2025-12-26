@@ -14,6 +14,8 @@ import time
 import argparse
 import platform
 import sys
+import urllib.request
+import urllib.error
 
 def run_command(cmd, cwd=None):
     """Run a shell command and print it."""
@@ -24,6 +26,12 @@ def clone_supabase_repo():
     """Clone the Supabase repository using sparse checkout if not already present."""
     if not os.path.exists("supabase"):
         print("Cloning the Supabase repository...")
+        # Check if git is available
+        git_available = shutil.which("git") is not None
+        if not git_available:
+            print("Warning: Git is not available. Cannot clone Supabase repository.")
+            print("Please install Git or ensure the supabase directory exists.")
+            return
         run_command([
             "git", "clone", "--filter=blob:none", "--no-checkout",
             "https://github.com/supabase/supabase.git"
@@ -35,9 +43,20 @@ def clone_supabase_repo():
         os.chdir("..")
     else:
         print("Supabase repository already exists, updating...")
-        os.chdir("supabase")
-        run_command(["git", "pull"])
-        os.chdir("..")
+        # Check if git is available
+        git_available = shutil.which("git") is not None
+        if git_available:
+            try:
+                original_dir = os.getcwd()
+                os.chdir("supabase")
+                run_command(["git", "pull"])
+                os.chdir(original_dir)
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                print("Warning: Could not update Supabase repository. Using existing version.")
+                if os.path.basename(os.getcwd()) == "supabase":
+                    os.chdir("..")
+        else:
+            print("Warning: Git is not available. Using existing Supabase repository.")
 
 def prepare_supabase_env():
     """Copy .env to .env in supabase/docker."""
@@ -93,6 +112,58 @@ def start_local_ai_with_retry(profile=None, environment=None, max_retries=3):
                 print(f"Failed to start AI services after {max_retries} attempts")
                 print("Check 'docker compose -p localai logs' for details")
                 raise
+    return False
+
+def wait_for_supabase_health(max_wait_seconds=180, check_interval=10):
+    """
+    Wait for Supabase services to be healthy by polling the Kong API gateway.
+
+    Supabase services (analytics, pooler, etc.) can take 50-100+ seconds to initialize.
+    This replaces the fixed 20-second sleep with active health checking.
+
+    Args:
+        max_wait_seconds: Maximum time to wait (default 180s = 3 minutes)
+        check_interval: Seconds between health checks
+
+    Returns:
+        bool: True if healthy, False if timeout
+    """
+    print(f"Waiting for Supabase to be healthy (max {max_wait_seconds}s)...")
+    start_time = time.time()
+    attempt = 0
+
+    while time.time() - start_time < max_wait_seconds:
+        attempt += 1
+        elapsed = int(time.time() - start_time)
+
+        try:
+            # Check Kong API gateway - any response means Supabase is up
+            req = urllib.request.Request("http://localhost:8000/", method='HEAD')
+            req.add_header('User-Agent', 'health-check')
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                print(f"Supabase healthy after {elapsed}s (HTTP {resp.getcode()})")
+                return True
+        except urllib.error.HTTPError as e:
+            # HTTP errors (401, 403, 404) still mean the service is running
+            if e.code in [401, 403, 404, 406]:
+                print(f"Supabase healthy after {elapsed}s (HTTP {e.code} - service responding)")
+                return True
+            else:
+                print(f"  Attempt {attempt}: HTTP {e.code} ({elapsed}s elapsed)")
+        except urllib.error.URLError as e:
+            print(f"  Attempt {attempt}: Not ready - {e.reason} ({elapsed}s elapsed)")
+        except Exception as e:
+            print(f"  Attempt {attempt}: Error - {e} ({elapsed}s elapsed)")
+
+        # Wait before next check
+        remaining = max_wait_seconds - (time.time() - start_time)
+        if remaining > check_interval:
+            time.sleep(check_interval)
+        elif remaining > 0:
+            time.sleep(remaining)
+
+    print(f"WARNING: Supabase health check timed out after {max_wait_seconds}s")
+    print("Proceeding with AI services startup anyway...")
     return False
 
 def generate_searxng_secret_key():
@@ -255,9 +326,8 @@ def main():
     # Start Supabase first
     start_supabase(args.environment)
 
-    # Give Supabase some time to initialize
-    print("Waiting for Supabase to initialize...")
-    time.sleep(20)
+    # Wait for Supabase to be healthy (replaces fixed 20s sleep)
+    wait_for_supabase_health(max_wait_seconds=180, check_interval=10)
 
     # Then start the local AI services with retry logic
     start_local_ai_with_retry(args.profile, args.environment, max_retries=3)
