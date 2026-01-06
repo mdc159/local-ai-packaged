@@ -16,6 +16,7 @@ import platform
 import sys
 import urllib.request
 import urllib.error
+import json
 
 def run_command(cmd, cwd=None):
     """Run a shell command and print it."""
@@ -73,6 +74,53 @@ def stop_existing_containers(profile=None):
     cmd.extend(["-f", "docker-compose.yml", "down"])
     run_command(cmd)
 
+def check_container_health(container_name_pattern="supabase", compose_file=None):
+    """Check if containers are running and healthy."""
+    containers = {}
+    try:
+        # Prefer docker compose ps if we have a compose file (more reliable for compose projects)
+        if compose_file and os.path.exists(compose_file):
+            # Run from project root (where start_services.py is located)
+            # Use absolute path for compose file to avoid cwd issues
+            abs_compose_file = os.path.abspath(compose_file) if not os.path.isabs(compose_file) else compose_file
+            cmd = ["docker", "compose", "-p", "localai", "-f", abs_compose_file, "ps", "-a", "--format", "json"]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                # Parse JSON output from docker compose ps
+                for line in result.stdout.strip().split('\n'):
+                    if line:
+                        try:
+                            container_info = json.loads(line)
+                            name = container_info.get("Name", "")
+                            if container_name_pattern.lower() in name.lower():
+                                status = container_info.get("State", "unknown")
+                                health = container_info.get("Health", "N/A")
+                                containers[name] = {"status": status, "health": health}
+                        except json.JSONDecodeError:
+                            continue
+        
+        # Fallback to docker ps if compose approach didn't work or wasn't available
+        if not containers:
+            # List all containers and filter by pattern
+            cmd = ["docker", "ps", "-a", "--format", "{{.Names}}|{{.Status}}|{{.Health}}"]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                for line in result.stdout.strip().split('\n'):
+                    if line:
+                        parts = line.split('|')
+                        if len(parts) >= 2:
+                            name = parts[0]
+                            # Only include containers matching the pattern
+                            if container_name_pattern.lower() in name.lower():
+                                status = parts[1]
+                                health = parts[2] if len(parts) > 2 else "N/A"
+                                containers[name] = {"status": status, "health": health}
+    except Exception:
+        pass
+    return containers
+
 def start_supabase(environment=None):
     """Start the Supabase services (using its compose file)."""
     print("Starting Supabase services...")
@@ -81,6 +129,56 @@ def start_supabase(environment=None):
         cmd.extend(["-f", "docker-compose.override.public.supabase.yml"])
     cmd.extend(["up", "-d"])
     run_command(cmd)
+    # Check container status immediately after startup
+    time.sleep(2)  # Brief wait for containers to register
+    compose_file = "supabase/docker/docker-compose.yml"
+    containers_before = check_container_health("supabase", compose_file=compose_file)
+    return containers_before
+
+def start_supabase_with_retry(environment=None, max_retries=3):
+    """Start Supabase services with retry logic for transient failures."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f"Starting Supabase services (attempt {attempt}/{max_retries})...")
+            containers = start_supabase(environment)
+            
+            # Wait a bit for containers to initialize before checking
+            time.sleep(5)
+            
+            # Check for critical container failures
+            compose_file = "supabase/docker/docker-compose.yml"
+            containers_after_check = check_container_health("supabase", compose_file=compose_file)
+            
+            critical_failed = []
+            for name, info in containers_after_check.items():
+                if "supabase-db" in name or ("db" in name.lower() and "supabase" in name.lower()):
+                    status_lower = info.get("status", "").lower()
+                    health_lower = info.get("health", "").lower()
+                    if "exited" in status_lower or "stopped" in status_lower or "unhealthy" in health_lower:
+                        critical_failed.append(f"{name} ({info.get('status')} / {info.get('health')})")
+            
+            if critical_failed:
+                if attempt < max_retries:
+                    print(f"Critical containers failed: {', '.join(critical_failed)}")
+                    print("Retrying in 15 seconds...")
+                    time.sleep(15)
+                    continue
+                else:
+                    print(f"ERROR: Critical containers failed after {max_retries} attempts: {', '.join(critical_failed)}")
+                    print("Check 'docker compose -p localai -f supabase/docker/docker-compose.yml logs supabase-db' for details")
+                    raise subprocess.CalledProcessError(1, "docker compose", "Critical containers failed")
+            
+            print("Successfully started Supabase services")
+            return True
+        except subprocess.CalledProcessError as e:
+            if attempt < max_retries:
+                print("Startup failed (likely transient issue), retrying in 15 seconds...")
+                time.sleep(15)
+            else:
+                print(f"Failed to start Supabase services after {max_retries} attempts")
+                print("Check 'docker compose -p localai -f supabase/docker/docker-compose.yml logs' for details")
+                raise
+    return False
 
 def start_local_ai(profile=None, environment=None):
     """Start the local AI services (using its compose file)."""
@@ -116,7 +214,7 @@ def start_local_ai_with_retry(profile=None, environment=None, max_retries=3):
 
 def wait_for_supabase_health(max_wait_seconds=180, check_interval=10):
     """
-    Wait for Supabase services to be healthy by polling the Kong API gateway.
+    Wait for Supabase services to be healthy by polling the Kong API gateway and checking critical containers.
 
     Supabase services (analytics, pooler, etc.) can take 50-100+ seconds to initialize.
     This replaces the fixed 20-second sleep with active health checking.
@@ -131,23 +229,56 @@ def wait_for_supabase_health(max_wait_seconds=180, check_interval=10):
     print(f"Waiting for Supabase to be healthy (max {max_wait_seconds}s)...")
     start_time = time.time()
     attempt = 0
+    critical_containers = ["supabase-db", "supabase-kong"]
 
     while time.time() - start_time < max_wait_seconds:
         attempt += 1
         elapsed = int(time.time() - start_time)
+
+        # Check critical container health
+        compose_file = "supabase/docker/docker-compose.yml"
+        containers = check_container_health("supabase", compose_file=compose_file)
+        
+        db_healthy = False
+        db_found = False
+        for name, info in containers.items():
+            if "supabase-db" in name or "db" in name.lower():
+                db_found = True
+                status_lower = info.get("status", "").lower()
+                health_lower = info.get("health", "").lower()
+                
+                # Check if container is running and healthy
+                if "running" in status_lower or "up" in status_lower:
+                    if "healthy" in health_lower or health_lower == "n/a" or not health_lower:
+                        # Container is running and either healthy or health check not configured
+                        db_healthy = True
+                    elif "unhealthy" in health_lower:
+                        print(f"  WARNING: supabase-db container is unhealthy: {info.get('status')} / {info.get('health')}")
+                elif "exited" in status_lower or "stopped" in status_lower:
+                    print(f"  WARNING: supabase-db container has exited: {info.get('status')}")
+        
+        # If we can't find the DB container, don't block on it (graceful degradation)
+        if not db_found and len(containers) == 0:
+            db_healthy = True  # Assume OK if we can't check
 
         try:
             # Check Kong API gateway - any response means Supabase is up
             req = urllib.request.Request("http://localhost:8000/", method='HEAD')
             req.add_header('User-Agent', 'health-check')
             with urllib.request.urlopen(req, timeout=5) as resp:
-                print(f"Supabase healthy after {elapsed}s (HTTP {resp.getcode()})")
-                return True
+                if db_healthy:
+                    print(f"Supabase healthy after {elapsed}s (HTTP {resp.getcode()}, DB healthy)")
+                    return True
+                else:
+                    print(f"  Attempt {attempt}: Kong responding but DB not healthy yet ({elapsed}s elapsed)")
         except urllib.error.HTTPError as e:
             # HTTP errors (401, 403, 404) still mean the service is running
             if e.code in [401, 403, 404, 406]:
-                print(f"Supabase healthy after {elapsed}s (HTTP {e.code} - service responding)")
-                return True
+                if db_healthy:
+                    print(f"Supabase healthy after {elapsed}s (HTTP {e.code} - service responding, DB healthy)")
+                    return True
+                else:
+                    print(f"  Attempt {attempt}: Kong responding but DB not healthy yet ({elapsed}s elapsed)")
             else:
                 print(f"  Attempt {attempt}: HTTP {e.code} ({elapsed}s elapsed)")
         except urllib.error.URLError as e:
@@ -323,8 +454,8 @@ def main():
     
     stop_existing_containers(args.profile)
 
-    # Start Supabase first
-    start_supabase(args.environment)
+    # Start Supabase first with retry logic
+    start_supabase_with_retry(args.environment, max_retries=3)
 
     # Wait for Supabase to be healthy (replaces fixed 20s sleep)
     wait_for_supabase_health(max_wait_seconds=180, check_interval=10)
