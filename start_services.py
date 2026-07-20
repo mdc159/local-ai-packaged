@@ -42,7 +42,7 @@ def get_enabled_services():
         return list(OPTIONAL_SERVICES)
     if raw.lower() == "none":
         return []
-    services = [s.strip() for s in raw.split(",") if s.strip()]
+    services = [s.strip().lower() for s in raw.split(",") if s.strip()]
     unknown = [s for s in services if s not in OPTIONAL_SERVICES]
     if unknown:
         print(f"Error: unknown service(s) in ENABLED_SERVICES: {', '.join(unknown)}")
