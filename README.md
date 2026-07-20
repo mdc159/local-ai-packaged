@@ -327,15 +327,21 @@ language model and Qdrant as your vector store.
 To update all containers to their latest versions (n8n, Open WebUI, etc.), run these commands:
 
 ```bash
-# Stop all services
-docker compose -p localai -f docker-compose.yml --profile <your-profile> down
+# Stop all services ("*" enables every profile so optional services are included)
+docker compose -p localai -f docker-compose.yml --profile "*" down
 
-# Pull latest versions of all containers
-docker compose -p localai -f docker-compose.yml --profile <your-profile> pull
+# Pull latest versions of all containers, including optional profiled services
+docker compose -p localai -f docker-compose.yml --profile "*" pull
 
 # Start services again with your desired profile
 python start_services.py --profile <your-profile>
 ```
+
+> Note: optional services (flowise, open-webui, qdrant, neo4j, searxng, langfuse)
+> are behind Docker Compose profiles and controlled per machine by
+> `ENABLED_SERVICES` in `.env`. The `--profile "*"` wildcard (Docker Compose
+> v2.24+) covers them all during upgrades; `start_services.py` enables the right
+> ones on startup.
 
 Replace `<your-profile>` with one of: `cpu`, `gpu-nvidia`, `gpu-amd`, or `none`.
 

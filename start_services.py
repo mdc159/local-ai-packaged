@@ -15,6 +15,41 @@ import argparse
 import platform
 import sys
 
+# Optional services that can be enabled/disabled per machine via the
+# ENABLED_SERVICES variable (in .env or the environment). Each name matches a
+# Docker Compose profile in docker-compose.yml. "langfuse" covers the whole
+# Langfuse group (langfuse-web, langfuse-worker, postgres, redis, clickhouse,
+# minio). Services without a profile (n8n, caddy, Supabase) always run.
+OPTIONAL_SERVICES = ["flowise", "open-webui", "qdrant", "neo4j", "searxng", "langfuse"]
+
+def get_enabled_services():
+    """Resolve which optional services to run.
+
+    Reads ENABLED_SERVICES from the environment, falling back to .env.
+    Unset or "all" -> every optional service (backwards compatible).
+    "none" -> only the always-on core. Otherwise a comma-separated list of
+    names from OPTIONAL_SERVICES; unknown names abort with a clear message.
+    """
+    raw = os.environ.get("ENABLED_SERVICES")
+    if raw is None and os.path.exists(".env"):
+        with open(".env") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("ENABLED_SERVICES="):
+                    raw = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    if raw is None or raw == "" or raw.lower() == "all":
+        return list(OPTIONAL_SERVICES)
+    if raw.lower() == "none":
+        return []
+    services = [s.strip().lower() for s in raw.split(",") if s.strip()]
+    unknown = [s for s in services if s not in OPTIONAL_SERVICES]
+    if unknown:
+        print(f"Error: unknown service(s) in ENABLED_SERVICES: {', '.join(unknown)}")
+        print(f"Valid names: {', '.join(OPTIONAL_SERVICES)} (or 'all' / 'none')")
+        sys.exit(1)
+    return services
+
 def run_command(cmd, cwd=None):
     """Run a shell command and print it."""
     print("Running:", " ".join(cmd))
@@ -71,7 +106,12 @@ def stop_existing_containers(profile=None):
     cmd = ["docker", "compose", "-p", "localai"]
     if profile and profile != "none":
         cmd.extend(["--profile", profile])
-    cmd.extend(["-f", "docker-compose.yml", "down"])
+    # Enable every optional-service profile on the way down so services that
+    # were disabled since the last start still get stopped; --remove-orphans
+    # catches anything left over from an older compose definition.
+    for service in OPTIONAL_SERVICES:
+        cmd.extend(["--profile", service])
+    cmd.extend(["-f", "docker-compose.yml", "down", "--remove-orphans"])
     run_command(cmd)
 
 def start_supabase(environment=None):
@@ -83,12 +123,14 @@ def start_supabase(environment=None):
     cmd.extend(["up", "-d"])
     run_command(cmd)
 
-def start_local_ai(profile=None, environment=None):
+def start_local_ai(profile=None, environment=None, enabled_services=None):
     """Start the local AI services (using its compose file)."""
     print("Starting local AI services...")
     cmd = ["docker", "compose", "-p", "localai"]
     if profile and profile != "none":
         cmd.extend(["--profile", profile])
+    for service in (enabled_services if enabled_services is not None else OPTIONAL_SERVICES):
+        cmd.extend(["--profile", service])
     cmd.extend(["-f", "docker-compose.yml"])
     if environment and environment == "private":
         cmd.extend(["-f", "docker-compose.override.private.yml"])
@@ -245,6 +287,12 @@ def main():
                       help='Environment to use for Docker Compose (default: private)')
     args = parser.parse_args()
 
+    enabled_services = get_enabled_services()
+    disabled = [s for s in OPTIONAL_SERVICES if s not in enabled_services]
+    print(f"Optional services enabled: {', '.join(enabled_services) or '(none)'}")
+    if disabled:
+        print(f"Optional services disabled: {', '.join(disabled)}")
+
     clone_supabase_repo()
     fix_windows_line_endings()
     prepare_supabase_env()
@@ -263,7 +311,7 @@ def main():
     time.sleep(10)
 
     # Then start the local AI services
-    start_local_ai(args.profile, args.environment)
+    start_local_ai(args.profile, args.environment, enabled_services)
 
 if __name__ == "__main__":
     main()
